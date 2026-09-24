@@ -302,32 +302,33 @@ carBody.add(wingMesh)
 
 const strutGeo = new THREE.BoxGeometry(0.06, 0.3, 0.1)
 const leftStrut = new THREE.Mesh(strutGeo, trimMaterial)
-leftStrut.position.set(-0.5, 0.94, -1.82)
+leftStrut.position.set(0.5, 0.94, -1.82)
 leftStrut.castShadow = true
 carBody.add(leftStrut)
 
 const rightStrut = new THREE.Mesh(strutGeo, trimMaterial)
-rightStrut.position.set(0.5, 0.94, -1.82)
+rightStrut.position.set(-0.5, 0.94, -1.82)
 rightStrut.castShadow = true
 carBody.add(rightStrut)
 
 // 7.4 Headlights & Taillights
+// In vehicle coordinates (+Z forward): +X is Left, -X is Right
 const headlightGeo = new THREE.BoxGeometry(0.36, 0.14, 0.08)
 const leftHeadlight = new THREE.Mesh(headlightGeo, headlightMaterial)
-leftHeadlight.position.set(-0.62, 0.52, 2.02)
+leftHeadlight.position.set(0.62, 0.52, 2.02)
 carBody.add(leftHeadlight)
 
 const rightHeadlight = new THREE.Mesh(headlightGeo, headlightMaterial)
-rightHeadlight.position.set(0.62, 0.52, 2.02)
+rightHeadlight.position.set(-0.62, 0.52, 2.02)
 carBody.add(rightHeadlight)
 
 const taillightGeo = new THREE.BoxGeometry(0.38, 0.12, 0.08)
 const leftTaillight = new THREE.Mesh(taillightGeo, taillightMaterial)
-leftTaillight.position.set(-0.62, 0.54, -2.02)
+leftTaillight.position.set(0.62, 0.54, -2.02)
 carBody.add(leftTaillight)
 
 const rightTaillight = new THREE.Mesh(taillightGeo, taillightMaterial)
-rightTaillight.position.set(0.62, 0.54, -2.02)
+rightTaillight.position.set(-0.62, 0.54, -2.02)
 carBody.add(rightTaillight)
 
 // 7.5 Wheels Setup
@@ -371,33 +372,33 @@ function buildWheelMesh(): THREE.Group {
   return wheelGroup
 }
 
-// Wheel Positions
+// Wheel Positions (Vehicle Left: +X, Vehicle Right: -X)
 const wheelTrackX = 0.98
 const wheelBaseZ = 1.28
 const wheelPosY = wheelRadius
 
 // Front Steerable Wheels (pivoting on Y)
 const frontLeftPivot = new THREE.Group()
-frontLeftPivot.position.set(-wheelTrackX, wheelPosY, wheelBaseZ)
+frontLeftPivot.position.set(wheelTrackX, wheelPosY, wheelBaseZ)
 const frontLeftWheel = buildWheelMesh()
 frontLeftPivot.add(frontLeftWheel)
 car.add(frontLeftPivot)
 
 const frontRightPivot = new THREE.Group()
-frontRightPivot.position.set(wheelTrackX, wheelPosY, wheelBaseZ)
+frontRightPivot.position.set(-wheelTrackX, wheelPosY, wheelBaseZ)
 const frontRightWheel = buildWheelMesh()
 frontRightPivot.add(frontRightWheel)
 car.add(frontRightPivot)
 
 // Rear Wheels
 const rearLeftPivot = new THREE.Group()
-rearLeftPivot.position.set(-wheelTrackX, wheelPosY, -wheelBaseZ)
+rearLeftPivot.position.set(wheelTrackX, wheelPosY, -wheelBaseZ)
 const rearLeftWheel = buildWheelMesh()
 rearLeftPivot.add(rearLeftWheel)
 car.add(rearLeftPivot)
 
 const rearRightPivot = new THREE.Group()
-rearRightPivot.position.set(wheelTrackX, wheelPosY, -wheelBaseZ)
+rearRightPivot.position.set(-wheelTrackX, wheelPosY, -wheelBaseZ)
 const rearRightWheel = buildWheelMesh()
 rearRightPivot.add(rearRightWheel)
 car.add(rearRightPivot)
@@ -557,9 +558,13 @@ function animate() {
   }
 
   // 10.2 Steering Transition
+  // In car coordinate space (+Z forward):
+  // +X is vehicle Left, -X is vehicle Right.
+  // Positive steering angle (+Y rotation) directs front wheels to the Left (+X).
+  // Negative steering angle (-Y rotation) directs front wheels to the Right (-X).
   let targetSteer = 0
-  if (keys.left) targetSteer -= 1.0
-  if (keys.right) targetSteer += 1.0
+  if (keys.left) targetSteer += 1.0  // A / ArrowLeft -> Turn Left (+steer)
+  if (keys.right) targetSteer -= 1.0 // D / ArrowRight -> Turn Right (-steer)
 
   currentSteerAngle = THREE.MathUtils.lerp(
     currentSteerAngle,
@@ -577,7 +582,7 @@ function animate() {
     const speedFactor = Math.min(Math.abs(currentSpeed) / 5.0, 1.0)
     const directionSign = currentSpeed >= 0 ? 1 : -1
 
-    // Yaw rotation
+    // Yaw rotation: positive angle rotates heading towards +X (Left), negative towards -X (Right)
     car.rotation.y += currentSteerAngle * TURN_RATE * speedFactor * directionSign * delta
   }
 
@@ -597,7 +602,8 @@ function animate() {
 
   // 10.5 Dynamic Body Tilt (Suspension Pitch & Roll)
   const targetPitch = (keys.forward ? -0.04 : (keys.backward ? 0.05 : 0)) * (Math.abs(currentSpeed) / MAX_FORWARD_SPEED)
-  const targetRoll = -currentSteerAngle * 0.08 * (Math.abs(currentSpeed) / MAX_FORWARD_SPEED)
+  // Centrifugal roll: steering left (currentSteerAngle > 0) leans car body outward towards Right (-X, positive Z rotation)
+  const targetRoll = currentSteerAngle * 0.08 * (Math.abs(currentSpeed) / MAX_FORWARD_SPEED)
   carBody.rotation.x = THREE.MathUtils.lerp(carBody.rotation.x, targetPitch, 0.15)
   carBody.rotation.z = THREE.MathUtils.lerp(carBody.rotation.z, targetRoll, 0.15)
 
