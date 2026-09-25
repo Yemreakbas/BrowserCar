@@ -16,7 +16,14 @@ export class CityWorld {
     this.group.name = 'CityWorldGroup'
     scene.add(this.group)
 
-    this.loader = new GLTFLoader()
+    const loadingManager = new THREE.LoadingManager()
+    loadingManager.setURLModifier((url) => {
+      if (url.includes('colormap.png')) {
+        return '/assets/cars/Textures/colormap.png'
+      }
+      return url
+    })
+    this.loader = new GLTFLoader(loadingManager)
 
     // 1. Build road networks, sidewalks, and markings
     this.createRoadNetwork()
@@ -305,7 +312,6 @@ export class CityWorld {
             const root = gltf.scene
             root.traverse((child) => {
               if ((child as THREE.Mesh).isMesh) {
-                child.castShadow = true
                 child.receiveShadow = true
               }
             })
@@ -351,11 +357,14 @@ export class CityWorld {
     // Sidewalk height is 0.18, so building sits right on the pavement
     instance.position.set(x, 0.18, z)
     instance.rotation.y = rotationY
+    instance.matrixAutoUpdate = false
+    instance.updateMatrix()
 
     instance.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
-        child.castShadow = true
         child.receiveShadow = true
+        child.matrixAutoUpdate = false
+        child.updateMatrix()
       }
     })
 

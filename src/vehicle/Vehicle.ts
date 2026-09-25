@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { PhysicsWorld } from '../physics/PhysicsWorld.ts'
+import type RAPIER from '@dimforge/rapier3d-compat'
 
 export interface VehicleInput {
   forward: boolean
@@ -14,6 +16,11 @@ export class Vehicle {
   public bodyGroup: THREE.Group
   public isLoaded: boolean = false
   public loadError: string | null = null
+
+  // Rapier Physics references
+  public rigidBody!: RAPIER.RigidBody
+  public collider!: RAPIER.Collider
+  private physicsWorld: PhysicsWorld
 
   // Kenney model node references
   private carModel: THREE.Group | null = null
@@ -34,17 +41,18 @@ export class Vehicle {
   // Vehicle Tuning
   public readonly MAX_FORWARD_SPEED: number = 28.0 // ~101 km/h
   public readonly MAX_REVERSE_SPEED: number = -11.0 // ~40 km/h
-  public readonly ACCELERATION: number = 16.0
+  public readonly ACCELERATION: number = 18.0
   public readonly REVERSE_ACCEL: number = 10.0
-  public readonly BRAKING_POWER: number = 26.0
-  public readonly HANDBRAKE_POWER: number = 38.0
-  public readonly DRAG: number = 5.5
+  public readonly BRAKING_POWER: number = 28.0
+  public readonly HANDBRAKE_POWER: number = 42.0
+  public readonly DRAG: number = 4.5
   public readonly MAX_STEER_ANGLE: number = 0.50 // radians (~28.6 degrees)
-  public readonly STEER_SPEED: number = 5.2
-  public readonly TURN_RATE: number = 1.9
+  public readonly STEER_SPEED: number = 5.5
+  public readonly TURN_RATE: number = 2.0
   public readonly WHEEL_RADIUS: number = 0.435 // Kenney wheel radius at 1.45 scale
 
-  constructor(scene: THREE.Scene, onLoaded?: () => void) {
+  constructor(scene: THREE.Scene, physicsWorld: PhysicsWorld, onLoaded?: () => void) {
+    this.physicsWorld = physicsWorld
     this.root = new THREE.Group()
     this.root.name = 'PlayerVehicleRoot'
     this.root.position.set(0, 0, 0)
@@ -55,11 +63,38 @@ export class Vehicle {
     this.bodyGroup.name = 'VehicleBodyGroup'
     this.root.add(this.bodyGroup)
 
-    // Temporary sleek placeholder until Kenney model finishes loading
+    // Temporary placeholder until Kenney model finishes loading
     this.createPlaceholder()
 
-    // Load real Kenney car model from public/assets/cars/sedan-sports.glb
+    // 1. Initialize Rapier Rigid Body and Chassis Collider
+    this.setupPhysicsBody()
+
+    // 2. Load real Kenney car model from public/assets/cars/sedan-sports.glb
     this.loadKenneyCar('/assets/cars/sedan-sports.glb', onLoaded)
+  }
+
+  private setupPhysicsBody() {
+    const rapier = PhysicsWorld.RAPIER_INSTANCE
+
+    // Dynamic rigid body positioned at car center of mass (y = 0.45)
+    // lockRotations(true, false, true) locks Pitch (X) and Roll (Z) on the physics body
+    // This gives complete stability (car never flips onto roof on collision) while Yaw (Y) turns freely
+    const bodyDesc = rapier.RigidBodyDesc.dynamic()
+      .setTranslation(0, 0.45, 0)
+      .setLinearDamping(0.6)
+      .enabledRotations(false, true, false)
+
+    this.rigidBody = this.physicsWorld.world.createRigidBody(bodyDesc)
+
+    // Cuboid collider matching the 3.7m x 2.0m x 1.2m sports sedan chassis
+    const halfWidth = 0.95
+    const halfHeight = 0.38
+    const halfLength = 1.75
+    const colliderDesc = rapier.ColliderDesc.cuboid(halfWidth, halfHeight, halfLength)
+      .setFriction(0.4)
+      .setRestitution(0.12)
+
+    this.collider = this.physicsWorld.world.createCollider(colliderDesc, this.rigidBody)
   }
 
   private createPlaceholder() {
@@ -81,12 +116,18 @@ export class Vehicle {
   }
 
   private loadKenneyCar(assetPath: string, onLoaded?: () => void) {
-    const loader = new GLTFLoader()
+    const loadingManager = new THREE.LoadingManager()
+    loadingManager.setURLModifier((url) => {
+      if (url.includes('colormap.png')) {
+        return '/assets/cars/Textures/colormap.png'
+      }
+      return url
+    })
+    const loader = new GLTFLoader(loadingManager)
 
     loader.load(
       assetPath,
       (gltf) => {
-        // Remove placeholder mesh
         if (this.placeholderMesh) {
           this.bodyGroup.remove(this.placeholderMesh)
           this.placeholderMesh = null
@@ -98,8 +139,6 @@ export class Vehicle {
         // Scale Kenney car to match real-world sports sedan proportions (~3.7m x 2.1m)
         const scale = 1.45
         this.carModel.scale.set(scale, scale, scale)
-
-        // Kenney models sit cleanly at y = 0
         this.carModel.position.set(0, 0.02, 0)
 
         // Enable shadows and locate wheel/body nodes
@@ -108,7 +147,6 @@ export class Vehicle {
             child.castShadow = true
             child.receiveShadow = true
 
-            // Optimize material rendering
             const mesh = child as THREE.Mesh
             if (mesh.material) {
               const mat = mesh.material as THREE.MeshStandardMaterial
@@ -116,7 +154,6 @@ export class Vehicle {
             }
           }
 
-          // Locate articulated nodes
           if (child.name === 'body') {
             this.bodyMesh = child
           } else if (child.name === 'wheel-front-left') {
@@ -149,56 +186,69 @@ export class Vehicle {
   }
 
   public update(delta: number, keys: VehicleInput) {
-    // 1. Acceleration, Braking & Handbrake Dynamics
+    if (!this.rigidBody) return
+
+    // 1. Sync Three.js Root Object from Rapier RigidBody
+    const trans = this.rigidBody.translation()
+    const rot = this.rigidBody.rotation()
+
+    // Height offset: rigidBody center of mass is at 0.45, so y - 0.43 places tires on ground
+    this.root.position.set(trans.x, trans.y - 0.43, trans.z)
+    this.root.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+
+    // 2. Compute Direction Vectors
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.root.quaternion)
+    const right = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.root.quaternion)
+
+    // 3. Decompose Linear Velocity into Forward & Lateral
+    const linvel = this.rigidBody.linvel()
+    const forwardSpeed = linvel.x * forward.x + linvel.z * forward.z
+    const lateralSpeed = linvel.x * right.x + linvel.z * right.z
+    this.currentSpeed = forwardSpeed
+
+    // 4. Lateral Grip (Cancels sideways sliding so vehicle tracks its wheels cleanly)
+    const gripDamping = Math.min(delta * 22.0, 0.94)
+    let newLinvelX = linvel.x - right.x * lateralSpeed * gripDamping
+    let newLinvelZ = linvel.z - right.z * lateralSpeed * gripDamping
+
+    // 5. Longitudinal Acceleration, Braking & Friction
+    let impulse = 0
     if (keys.handbrake) {
-      if (Math.abs(this.currentSpeed) < this.HANDBRAKE_POWER * delta) {
-        this.currentSpeed = 0
-      } else if (this.currentSpeed > 0) {
-        this.currentSpeed -= this.HANDBRAKE_POWER * delta
-      } else {
-        this.currentSpeed += this.HANDBRAKE_POWER * delta
-      }
+      // Handbrake: strong deceleration
+      const brakeImpulse = Math.min(delta * this.HANDBRAKE_POWER, Math.abs(forwardSpeed)) * Math.sign(forwardSpeed)
+      impulse -= brakeImpulse
     } else if (keys.forward) {
-      if (this.currentSpeed < 0) {
-        // Braking while reversing
-        this.currentSpeed += this.BRAKING_POWER * delta
-      } else {
+      if (forwardSpeed < 0) {
+        // Braking while in reverse
+        impulse += this.BRAKING_POWER * delta
+      } else if (forwardSpeed < this.MAX_FORWARD_SPEED) {
         // Accelerating forward
-        this.currentSpeed = Math.min(
-          this.currentSpeed + this.ACCELERATION * delta,
-          this.MAX_FORWARD_SPEED
-        )
+        impulse += this.ACCELERATION * delta
       }
     } else if (keys.backward) {
-      if (this.currentSpeed > 0) {
-        // Braking while moving forward
-        this.currentSpeed = Math.max(
-          this.currentSpeed - this.BRAKING_POWER * delta,
-          0
-        )
-      } else {
+      if (forwardSpeed > 0.4) {
+        // Foot brake while moving forward
+        impulse -= this.BRAKING_POWER * delta
+      } else if (forwardSpeed > this.MAX_REVERSE_SPEED) {
         // Reversing
-        this.currentSpeed = Math.max(
-          this.currentSpeed - this.REVERSE_ACCEL * delta,
-          this.MAX_REVERSE_SPEED
-        )
+        impulse -= this.REVERSE_ACCEL * delta
       }
     } else {
-      // Natural rolling friction & aerodynamic drag
-      if (Math.abs(this.currentSpeed) < this.DRAG * delta) {
-        this.currentSpeed = 0
-      } else if (this.currentSpeed > 0) {
-        this.currentSpeed -= this.DRAG * delta
-      } else {
-        this.currentSpeed += this.DRAG * delta
-      }
+      // Coasting drag
+      const dragAmount = Math.min(delta * this.DRAG, Math.abs(forwardSpeed)) * Math.sign(forwardSpeed)
+      impulse -= dragAmount
     }
 
-    // 2. Steering angle interpolation
-    // A = Turn Left (+steer angle), D = Turn Right (-steer angle)
+    newLinvelX += forward.x * impulse
+    newLinvelZ += forward.z * impulse
+
+    // Apply updated velocity (preserving Rapier gravity on Y)
+    this.rigidBody.setLinvel({ x: newLinvelX, y: linvel.y, z: newLinvelZ }, true)
+
+    // 6. Steering Interpolation & Yaw Angular Velocity
     let targetSteer = 0
-    if (keys.left) targetSteer += 1.0
-    if (keys.right) targetSteer -= 1.0
+    if (keys.left) targetSteer += 1.0  // A / Left -> positive steer angle (steer left)
+    if (keys.right) targetSteer -= 1.0 // D / Right -> negative steer angle (steer right)
 
     this.currentSteerAngle = THREE.MathUtils.lerp(
       this.currentSteerAngle,
@@ -206,25 +256,17 @@ export class Vehicle {
       1 - Math.exp(-this.STEER_SPEED * delta)
     )
 
-    // 3. Vehicle Heading (Yaw) and Position Translation
-    if (Math.abs(this.currentSpeed) > 0.05) {
-      const speedFactor = Math.min(Math.abs(this.currentSpeed) / 5.0, 1.0)
-      const directionSign = this.currentSpeed >= 0 ? 1 : -1
-
-      // Yaw rotation: positive angle turns heading left (+X), negative turns right (-X)
-      this.root.rotation.y +=
-        this.currentSteerAngle * this.TURN_RATE * speedFactor * directionSign * delta
+    if (Math.abs(forwardSpeed) > 0.1) {
+      const speedFactor = Math.min(Math.abs(forwardSpeed) / 5.0, 1.0)
+      const directionSign = forwardSpeed >= 0 ? 1 : -1
+      const targetAngVel = this.currentSteerAngle * this.TURN_RATE * speedFactor * directionSign
+      this.rigidBody.setAngvel({ x: 0, y: targetAngVel, z: 0 }, true)
+    } else {
+      this.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
 
-    // Forward direction (+Z forward in car local coordinate space)
-    const forwardVector = new THREE.Vector3(0, 0, 1).applyAxisAngle(
-      new THREE.Vector3(0, 1, 0),
-      this.root.rotation.y
-    )
-    this.root.position.addScaledVector(forwardVector, this.currentSpeed * delta)
-
-    // 4. Wheel Visual Steering and Rolling Animations
-    const distanceTravelled = this.currentSpeed * delta
+    // 7. Visual Wheel Steering and Rolling Animations
+    const distanceTravelled = forwardSpeed * delta
     this.wheelSpinAngle += distanceTravelled / this.WHEEL_RADIUS
 
     if (this.wheelFrontLeft) {
@@ -242,60 +284,43 @@ export class Vehicle {
       this.wheelBackRight.rotation.x = this.wheelSpinAngle
     }
 
-    // 5. Dynamic Suspension Pitch & Roll
-    const speedRatio = Math.abs(this.currentSpeed) / this.MAX_FORWARD_SPEED
-    const targetPitch =
-      (keys.forward ? -0.04 : keys.backward ? 0.05 : 0) * speedRatio
+    // 8. Dynamic Suspension Pitch & Roll on Body Mesh
+    const speedRatio = Math.abs(forwardSpeed) / this.MAX_FORWARD_SPEED
+    const targetPitch = (keys.forward ? -0.04 : keys.backward ? 0.05 : 0) * speedRatio
     const targetRoll = this.currentSteerAngle * 0.07 * speedRatio
 
     if (this.bodyMesh) {
-      this.bodyMesh.rotation.x = THREE.MathUtils.lerp(
-        this.bodyMesh.rotation.x,
-        targetPitch,
-        0.18
-      )
-      this.bodyMesh.rotation.z = THREE.MathUtils.lerp(
-        this.bodyMesh.rotation.z,
-        targetRoll,
-        0.18
-      )
+      this.bodyMesh.rotation.x = THREE.MathUtils.lerp(this.bodyMesh.rotation.x, targetPitch, 0.18)
+      this.bodyMesh.rotation.z = THREE.MathUtils.lerp(this.bodyMesh.rotation.z, targetRoll, 0.18)
     } else {
-      this.bodyGroup.rotation.x = THREE.MathUtils.lerp(
-        this.bodyGroup.rotation.x,
-        targetPitch,
-        0.18
-      )
-      this.bodyGroup.rotation.z = THREE.MathUtils.lerp(
-        this.bodyGroup.rotation.z,
-        targetRoll,
-        0.18
-      )
+      this.bodyGroup.rotation.x = THREE.MathUtils.lerp(this.bodyGroup.rotation.x, targetPitch, 0.18)
+      this.bodyGroup.rotation.z = THREE.MathUtils.lerp(this.bodyGroup.rotation.z, targetRoll, 0.18)
     }
   }
 
-  public reset(spawnPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)) {
+  public reset(spawnX: number = 0, spawnZ: number = 0) {
+    if (!this.rigidBody) return
+
     this.currentSpeed = 0
     this.currentSteerAngle = 0
     this.wheelSpinAngle = 0
-    this.root.position.copy(spawnPosition)
+
+    // Reset physics body state
+    this.rigidBody.setTranslation({ x: spawnX, y: 0.45, z: spawnZ }, true)
+    this.rigidBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true)
+    this.rigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true)
+    this.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
+
+    // Reset Three.js transforms
+    this.root.position.set(spawnX, 0.02, spawnZ)
     this.root.rotation.set(0, 0, 0)
     this.bodyGroup.rotation.set(0, 0, 0)
 
-    if (this.bodyMesh) {
-      this.bodyMesh.rotation.set(0, 0, 0)
-    }
-    if (this.wheelFrontLeft) {
-      this.wheelFrontLeft.rotation.set(0, 0, 0)
-    }
-    if (this.wheelFrontRight) {
-      this.wheelFrontRight.rotation.set(0, 0, 0)
-    }
-    if (this.wheelBackLeft) {
-      this.wheelBackLeft.rotation.set(0, 0, 0)
-    }
-    if (this.wheelBackRight) {
-      this.wheelBackRight.rotation.set(0, 0, 0)
-    }
+    if (this.bodyMesh) this.bodyMesh.rotation.set(0, 0, 0)
+    if (this.wheelFrontLeft) this.wheelFrontLeft.rotation.set(0, 0, 0)
+    if (this.wheelFrontRight) this.wheelFrontRight.rotation.set(0, 0, 0)
+    if (this.wheelBackLeft) this.wheelBackLeft.rotation.set(0, 0, 0)
+    if (this.wheelBackRight) this.wheelBackRight.rotation.set(0, 0, 0)
   }
 
   public getSpeedKmh(): number {
