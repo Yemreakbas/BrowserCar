@@ -62,6 +62,10 @@ export class ModeManager {
     return this.activeMode
   }
 
+  public getMode(type: GameModeType): IGameMode | undefined {
+    return this.modes.get(type)
+  }
+
   public getAllModes(): IGameMode[] {
     return Array.from(this.modes.values())
   }

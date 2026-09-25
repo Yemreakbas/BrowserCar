@@ -121,9 +121,10 @@ io.on('connection', socket => {
     playerManager.setPlayerRoom(socket.id, DEFAULT_GLOBAL_ROOM_ID)
     socket.join(DEFAULT_GLOBAL_ROOM_ID)
 
+    const assignedPlayer = defaultJoin.player || player
     const roomJoinedPayload: RoomJoinedPayload = {
       room: defaultJoin.room,
-      player,
+      player: assignedPlayer,
     }
     socket.emit(SOCKET_EVENTS.ROOM_JOINED, roomJoinedPayload)
 
@@ -135,7 +136,7 @@ io.on('connection', socket => {
 
     const playerJoinedPayload: PlayerJoinedRoomPayload = {
       roomId: DEFAULT_GLOBAL_ROOM_ID,
-      player,
+      player: assignedPlayer,
       room: defaultJoin.room,
     }
     socket.to(DEFAULT_GLOBAL_ROOM_ID).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)
@@ -173,6 +174,13 @@ io.on('connection', socket => {
       socket.to(state.roomId).emit(SOCKET_EVENTS.PLAYER_STATE, result.state)
     } catch (err) {
       console.warn('[Multiplayer] Error handling player state update:', err)
+    }
+  })
+
+  // --- PLAYER: PING / LATENCY MEASUREMENT ---
+  socket.on('player:ping', (clientTime: number, callback?: (serverTime: number) => void) => {
+    if (typeof callback === 'function') {
+      callback(Date.now())
     }
   })
 
@@ -265,9 +273,10 @@ io.on('connection', socket => {
 
       console.log(`[Multiplayer] Player ${currentPlayer.id} joined room ${room.id} (${room.currentPlayers}/${room.maxPlayers})`)
 
+      const assignedPlayer = joinResult.player || currentPlayer
       const roomJoinedPayload: RoomJoinedPayload = {
         room,
-        player: currentPlayer,
+        player: assignedPlayer,
       }
       socket.emit(SOCKET_EVENTS.ROOM_JOINED, roomJoinedPayload)
 
@@ -279,7 +288,7 @@ io.on('connection', socket => {
 
       const playerJoinedPayload: PlayerJoinedRoomPayload = {
         roomId: room.id,
-        player: currentPlayer,
+        player: assignedPlayer,
         room,
       }
       socket.to(room.id).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)

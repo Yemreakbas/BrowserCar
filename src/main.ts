@@ -8,10 +8,12 @@ import { DriftTrack } from './world/DriftTrack.ts'
 
 import { GameModeType, type ModeHUDController } from './modes/types.ts'
 import { ModeManager } from './modes/ModeManager.ts'
+import { CityFreeRoamMode } from './modes/CityFreeRoamMode.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
 import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
+import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -60,6 +62,25 @@ app.innerHTML = `
         </button>
       </div>
     </header>
+
+    <!-- Online City Player List Overlay (Phase 15) -->
+    <div id="city-player-list-card" class="city-player-list-card" style="display: none;">
+      <div id="player-list-header" class="player-list-header" title="Genişlet / Daralt (TAB)">
+        <div class="player-list-title">
+          <span class="online-indicator"></span>
+          <span id="player-list-room-title">ŞEHİR SÜRÜCÜLERİ</span>
+          <span id="player-list-count-badge" class="count-badge">1</span>
+        </div>
+        <span class="player-list-toggle-hint">TAB</span>
+      </div>
+      <div id="player-list-items" class="player-list-items">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="player-list-footer">
+        <span id="player-list-ping">Gecikme: -- ms</span>
+        <span style="color: #64748b;">[R] Sıfırla • [C] Konum</span>
+      </div>
+    </div>
 
     <footer class="hud-footer">
       <div class="speedometer-card">
@@ -404,6 +425,14 @@ const mpActiveRoomSub = document.querySelector<HTMLDivElement>('#mp-active-room-
 const btnLeaveRoom = document.querySelector<HTMLButtonElement>('#btn-leave-room')!
 const mpMemberCount = document.querySelector<HTMLSpanElement>('#mp-member-count')!
 const mpMemberList = document.querySelector<HTMLDivElement>('#mp-member-list')!
+
+// Online City Player List Overlay Elements (Phase 15)
+const cityPlayerListCard = document.querySelector<HTMLDivElement>('#city-player-list-card')!
+const playerListHeader = document.querySelector<HTMLDivElement>('#player-list-header')!
+const playerListRoomTitle = document.querySelector<HTMLSpanElement>('#player-list-room-title')!
+const playerListCountBadge = document.querySelector<HTMLSpanElement>('#player-list-count-badge')!
+const playerListItems = document.querySelector<HTMLDivElement>('#player-list-items')!
+const playerListPing = document.querySelector<HTMLSpanElement>('#player-list-ping')!
 
 // --- 2. THREE.JS SCENE SETUP ---
 const scene = new THREE.Scene()
@@ -859,6 +888,93 @@ async function bootstrap() {
     }
   })
 
+  // 8.1 Online City Free Roam Synchronized Respawn & Spawning (Phase 15)
+  const doRespawn = () => {
+    modeManager.reset()
+    if (vehicle && vehicle.rigidBody) {
+      const p = vehicle.root.position
+      const q = vehicle.root.quaternion
+      networkManager.sendRespawn([p.x, p.y, p.z], [q.x, q.y, q.z, q.w])
+    }
+  }
+
+  const doCycleSpawn = () => {
+    modeManager.cycleSpawn()
+    if (vehicle && vehicle.rigidBody) {
+      const p = vehicle.root.position
+      const q = vehicle.root.quaternion
+      networkManager.sendRespawn([p.x, p.y, p.z], [q.x, q.y, q.z, q.w])
+    }
+  }
+
+  // 8.2 Online City Player List Overlay Controller (Phase 15)
+  playerListHeader.addEventListener('click', () => {
+    cityPlayerListCard.classList.toggle('collapsed')
+  })
+
+  const updateCityPlayerList = () => {
+    const isOnline = networkManager.isConnected()
+    const activeMode = modeManager.getActiveMode()
+    const isCity = activeMode.modeType === GameModeType.CITY_FREE_ROAM
+
+    if (!isOnline || !isCity) {
+      cityPlayerListCard.style.display = 'none'
+      return
+    }
+
+    cityPlayerListCard.style.display = 'flex'
+    const currentRoom = networkManager.getCurrentRoom()
+    const myId = networkManager.getPlayerId() || ''
+    const myName = networkManager.getPlayerName() || 'Sen'
+    const myColor = getPlayerColorHex(myId)
+    const myPing = networkManager.getPing()
+
+    playerListRoomTitle.textContent = currentRoom ? currentRoom.name : 'ŞEHİR SÜRÜCÜLERİ'
+    playerListPing.textContent = `Gecikme: ${myPing} ms`
+
+    const remoteVehicles = remotePlayerManager.getAllRemoteVehicles()
+    const totalCount = 1 + remoteVehicles.size
+    playerListCountBadge.textContent = totalCount.toString()
+
+    const localPos = vehicle.root.position
+
+    let itemsHtml = `
+      <div class="player-list-item is-me">
+        <div class="item-left">
+          <span class="item-car-dot" style="background: ${myColor}; color: ${myColor};"></span>
+          <span class="item-name">${myName}</span>
+          <span class="mp-you-badge">SEN</span>
+        </div>
+        <div class="item-right">
+          <span class="item-dist">BURADA</span>
+          <span class="item-ping">${myPing}ms</span>
+        </div>
+      </div>
+    `
+
+    for (const [rId, remoteCar] of remoteVehicles.entries()) {
+      const rColor = getPlayerColorHex(rId)
+      const dist = Math.round(localPos.distanceTo(remoteCar.root.position))
+      const isHost = currentRoom && currentRoom.hostId === rId
+
+      itemsHtml += `
+        <div class="player-list-item">
+          <div class="item-left">
+            <span class="item-car-dot" style="background: ${rColor}; color: ${rColor};"></span>
+            <span class="item-name" title="${remoteCar.playerName}">${remoteCar.playerName}</span>
+            ${isHost ? '<span class="mp-host-badge">👑</span>' : ''}
+          </div>
+          <div class="item-right">
+            <span class="item-dist">${dist}m</span>
+            <span class="item-ping">🟢</span>
+          </div>
+        </div>
+      `
+    }
+
+    playerListItems.innerHTML = itemsHtml
+  }
+
   networkManager.onRoomsUpdated((rooms) => {
     renderRoomsList(rooms)
   })
@@ -868,6 +984,14 @@ async function bootstrap() {
     // Synchronize local game mode with room mode
     if (payload.room.mode && payload.room.mode in GameModeType) {
       modeManager.setMode(payload.room.mode as GameModeType)
+    }
+    // Distributed spawn assignment for City Free Roam
+    if (payload.room.mode === GameModeType.CITY_FREE_ROAM && payload.player.spawnIndex !== undefined) {
+      const cityMode = modeManager.getMode(GameModeType.CITY_FREE_ROAM) as CityFreeRoamMode
+      if (cityMode) {
+        cityMode.currentSpawnIndex = payload.player.spawnIndex
+        doRespawn()
+      }
     }
   })
 
@@ -930,6 +1054,12 @@ async function bootstrap() {
       return
     }
 
+    if (e.code === 'Tab') {
+      e.preventDefault()
+      cityPlayerListCard.classList.toggle('collapsed')
+      return
+    }
+
     if (isTyping) return
 
     switch (e.code) {
@@ -960,10 +1090,10 @@ async function bootstrap() {
         toggleModal()
         break
       case 'KeyR':
-        modeManager.reset()
+        doRespawn()
         break
       case 'KeyC':
-        modeManager.cycleSpawn()
+        doCycleSpawn()
         break
     }
   })
@@ -997,11 +1127,11 @@ async function bootstrap() {
   })
 
   btnReset.addEventListener('click', () => {
-    modeManager.reset()
+    doRespawn()
   })
 
   btnSpawn.addEventListener('click', () => {
-    modeManager.cycleSpawn()
+    doCycleSpawn()
   })
 
   // --- 7. CHASE CAMERA VARIABLES ---
@@ -1016,6 +1146,7 @@ async function bootstrap() {
 
   // --- 9. MAIN ANIMATION & PHYSICS LOOP ---
   let lastTime = performance.now()
+  let playerListTimer = 0
 
   function animate() {
     requestAnimationFrame(animate)
@@ -1039,6 +1170,13 @@ async function bootstrap() {
 
     // 9.4b Remote Players Update & Local Telemetry Sync (Phase 13)
     remotePlayerManager.update(delta)
+
+    // 9.4c Online City Player List Throttle Update (Phase 15)
+    playerListTimer += delta
+    if (playerListTimer >= 0.25) {
+      playerListTimer = 0
+      updateCityPlayerList()
+    }
 
     netSyncAccumulator += delta
     if (netSyncAccumulator >= 0.05) {

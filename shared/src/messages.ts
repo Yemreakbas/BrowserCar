@@ -4,6 +4,8 @@ export interface PlayerInfo {
   isHost?: boolean
   connectedAt: number
   ping?: number
+  spawnIndex?: number
+  color?: number
 }
 
 export interface RoomInfo {
@@ -80,6 +82,7 @@ export interface PlayerStateMessage {
   isBraking: boolean
   isDrifting: boolean
   sequence?: number
+  isRespawn?: boolean
   inputs?: {
     forward: boolean
     backward: boolean
@@ -102,6 +105,7 @@ export interface AuthoritativePlayerState {
   isBraking: boolean
   isDrifting: boolean
   lastProcessedSequence: number
+  isRespawn?: boolean
   timestamp: number
 }
 

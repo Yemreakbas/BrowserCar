@@ -74,7 +74,7 @@ export class RoomManager {
   /**
    * Join an existing room.
    */
-  public joinRoom(roomId: string, player: PlayerInfo): { success: boolean; error?: string; room?: RoomInfo } {
+  public joinRoom(roomId: string, player: PlayerInfo): { success: boolean; error?: string; room?: RoomInfo; player?: PlayerInfo } {
     const room = this.rooms.get(roomId)
     if (!room) {
       return { success: false, error: 'Oda bulunamadı' }
@@ -86,12 +86,15 @@ export class RoomManager {
 
     const existingIndex = room.players.findIndex(p => p.id === player.id)
     if (existingIndex !== -1) {
-      room.players[existingIndex] = { ...player, isHost: room.players[existingIndex].isHost }
-      return { success: true, room }
+      const merged = { ...room.players[existingIndex], ...player }
+      room.players[existingIndex] = merged
+      return { success: true, room, player: merged }
     }
 
+    const spawnIndex = room.players.length % 4
     const isHost = room.players.length === 0 && room.id !== DEFAULT_GLOBAL_ROOM_ID
-    room.players.push({ ...player, isHost })
+    const updatedPlayer: PlayerInfo = { ...player, isHost, spawnIndex }
+    room.players.push(updatedPlayer)
     room.currentPlayers = room.players.length
 
     if (isHost) {
@@ -102,7 +105,7 @@ export class RoomManager {
       this.playerStatesByRoom.set(roomId, new Map())
     }
 
-    return { success: true, room }
+    return { success: true, room, player: updatedPlayer }
   }
 
   /**
@@ -202,8 +205,12 @@ export class RoomManager {
       validatedVel = [0, 0, 0]
       needsCorrection = true
       correctionReason = 'OUT_OF_BOUNDS'
+    } else if (state.isRespawn) {
+      // 2. Synchronized Respawn / Spawn Cycling: Accept position without displacement penalty
+      needsCorrection = false
+      correctionReason = undefined
     } else if (prev) {
-      // 2. Displacement & Speed Sanity Check
+      // 3. Displacement & Speed Sanity Check
       const dt = Math.max(0.01, (state.timestamp - prev.timestamp) / 1000)
       const dx = state.position[0] - prev.position[0]
       const dy = state.position[1] - prev.position[1]
@@ -236,6 +243,7 @@ export class RoomManager {
       isBraking: !!state.isBraking,
       isDrifting: !!state.isDrifting,
       lastProcessedSequence: state.sequence || 0,
+      isRespawn: !!state.isRespawn,
       timestamp: Date.now(),
     }
 

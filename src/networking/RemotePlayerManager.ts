@@ -84,4 +84,17 @@ export class RemotePlayerManager {
   public getCount(): number {
     return this.remoteVehicles.size
   }
+
+  public getRemoteVehicle(playerId: string): RemoteVehicle | undefined {
+    return this.remoteVehicles.get(playerId)
+  }
+
+  public getAllRemoteVehicles(): Map<string, RemoteVehicle> {
+    return this.remoteVehicles
+  }
+
+  public getPlayerPosition(playerId: string): THREE.Vector3 | null {
+    const car = this.remoteVehicles.get(playerId)
+    return car ? car.root.position : null
+  }
 }

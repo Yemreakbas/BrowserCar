@@ -36,6 +36,10 @@ export class NetworkManager {
     timestamp: number
   }> = []
 
+  // Ping tracking (Phase 15)
+  private currentPing: number = 0
+  private pingTimer: number | null = null
+
   // Event Listeners
   private statusListeners = new Set<(status: NetworkStatus, playerId?: string) => void>()
   private roomsListeners = new Set<(rooms: RoomInfo[]) => void>()
@@ -74,16 +78,32 @@ export class NetworkManager {
     }
   }
 
+  private startPingLoop(): void {
+    if (this.pingTimer) window.clearInterval(this.pingTimer)
+    this.pingTimer = window.setInterval(() => {
+      if (this.socket && this.socket.connected) {
+        const start = performance.now()
+        this.socket.emit('player:ping', start, () => {
+          this.currentPing = Math.round(performance.now() - start)
+        })
+      }
+    }, 2500)
+  }
+
   private setupSocketHandlers(): void {
     if (!this.socket) return
 
     this.socket.on(SOCKET_EVENTS.CONNECT, () => {
       console.log(`[NetworkManager] Connected to server at ${this.serverUrl}`)
-      // Status will transition to 'connected' once PLAYER_INIT is received
+      this.startPingLoop()
     })
 
     this.socket.on(SOCKET_EVENTS.DISCONNECT, reason => {
       console.log(`[NetworkManager] Disconnected from server: ${reason}`)
+      if (this.pingTimer) {
+        window.clearInterval(this.pingTimer)
+        this.pingTimer = null
+      }
       this.currentRoom = null
       this.setStatus('disconnected')
     })
@@ -176,6 +196,7 @@ export class NetworkManager {
     steering: number
     isBraking: boolean
     isDrifting: boolean
+    isRespawn?: boolean
     inputs?: {
       forward: boolean
       backward: boolean
@@ -200,6 +221,7 @@ export class NetworkManager {
       isBraking: data.isBraking,
       isDrifting: data.isDrifting,
       sequence: this.sequenceNumber,
+      isRespawn: data.isRespawn,
       inputs: data.inputs,
       timestamp: Date.now(),
     }
@@ -213,6 +235,36 @@ export class NetworkManager {
     if (this.pendingStates.length > 60) this.pendingStates.shift()
 
     this.socket.emit(SOCKET_EVENTS.PLAYER_STATE, message)
+  }
+
+  /**
+   * Broadcast an explicit player respawn / spawn cycle event without displacement penalty.
+   */
+  public sendRespawn(
+    position: [number, number, number],
+    rotation: [number, number, number, number]
+  ): void {
+    this.sendPlayerState({
+      position,
+      rotation,
+      velocity: [0, 0, 0],
+      speed: 0,
+      steering: 0,
+      isBraking: false,
+      isDrifting: false,
+      isRespawn: true,
+      inputs: {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        handbrake: false,
+      },
+    })
+  }
+
+  public getPing(): number {
+    return this.currentPing
   }
 
   public createRoom(options: { name: string; mode: string; map: string; maxPlayers?: number; playerName?: string }): Promise<RoomInfo> {

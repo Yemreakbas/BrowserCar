@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { PlayerStateMessage } from '../../shared/src/messages.ts'
 
-const REMOTE_CAR_COLORS = [
+export const REMOTE_CAR_COLORS = [
   0xef4444, // Vibrant Red
   0xf59e0b, // Amber Gold
   0x10b981, // Emerald Green
@@ -13,13 +13,18 @@ const REMOTE_CAR_COLORS = [
   0xf97316, // Orange
 ]
 
-function getPlayerColor(id: string): number {
+export function getPlayerColor(id: string): number {
   let hash = 0
   for (let i = 0; i < id.length; i++) {
     hash = (hash << 5) - hash + id.charCodeAt(i)
     hash |= 0
   }
   return REMOTE_CAR_COLORS[Math.abs(hash) % REMOTE_CAR_COLORS.length]
+}
+
+export function getPlayerColorHex(id: string): string {
+  const col = getPlayerColor(id)
+  return '#' + col.toString(16).padStart(6, '0')
 }
 
 export class RemoteVehicle {
