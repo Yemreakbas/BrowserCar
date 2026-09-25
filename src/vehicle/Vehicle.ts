@@ -43,6 +43,14 @@ export class Vehicle {
   private wheelSpinAngle: number = 0
   private currentTraction: number = 0.94
 
+  // Drift State & Slip Telemetry (Phase 9)
+  public isDrifting: boolean = false
+  public isHandbrakeActive: boolean = false
+  public slipAngle: number = 0 // Slip angle in radians
+  public slipAngleDeg: number = 0 // Slip angle in degrees
+  public driftDuration: number = 0 // Seconds continuously drifting
+  public currentLateralSpeed: number = 0
+
   constructor(
     scene: THREE.Scene,
     physicsWorld: PhysicsWorld,
@@ -204,14 +212,37 @@ export class Vehicle {
     const forwardSpeed = linvel.x * forward.x + linvel.z * forward.z
     const lateralSpeed = linvel.x * right.x + linvel.z * right.z
     this.currentSpeed = forwardSpeed
+    this.currentLateralSpeed = lateralSpeed
+    this.isHandbrakeActive = keys.handbrake
+
+    // Slip Angle Calculation (Arcade Drift Slip Detection)
+    const absForward = Math.abs(forwardSpeed)
+    const absLateral = Math.abs(lateralSpeed)
+    this.slipAngle = absForward > 0.3 ? Math.atan2(absLateral, absForward) : 0
+    this.slipAngleDeg = (this.slipAngle * 180) / Math.PI
+
+    // Drift Detection Criteria
+    // Requires sufficient forward velocity to prevent stationary spinning
+    const hasDriftSpeed = absForward >= this.config.driftMinSpeed
+    const isUnderHandbrake = keys.handbrake && hasDriftSpeed
+    const isAngleSustained = this.slipAngleDeg >= this.config.driftMinAngleDeg && hasDriftSpeed
+    const isNotSpunOut = this.slipAngleDeg <= this.config.driftMaxAngleDeg
+
+    if ((isUnderHandbrake || isAngleSustained) && isNotSpunOut) {
+      this.isDrifting = true
+      this.driftDuration += delta
+    } else {
+      this.isDrifting = false
+      this.driftDuration = 0
+    }
 
     // 4. Configurable Traction & Dynamic Drift Dynamics
-    // Under handbrake, lateral grip drops to allow controllable power-slides
-    const targetTraction = keys.handbrake
+    // Under active drift or handbrake, lateral grip drops to allow smooth, controllable slides
+    const targetTraction = this.isDrifting
       ? this.config.lateralGripDrift
       : this.config.lateralGripNormal
 
-    const gripLerpRate = keys.handbrake ? 12.0 : this.config.driftGripRecoverySpeed
+    const gripLerpRate = this.isDrifting ? 14.0 : this.config.driftGripRecoverySpeed
     this.currentTraction = THREE.MathUtils.lerp(
       this.currentTraction,
       targetTraction,
@@ -225,9 +256,9 @@ export class Vehicle {
     // 5. Non-Linear Acceleration Curve & Braking Dynamics
     let impulse = 0
     if (keys.handbrake) {
-      // Handbrake stopping force
+      // Balanced handbrake deceleration: slows forward velocity moderately without killing slide momentum
       const brakeImpulse =
-        Math.min(delta * this.config.handbrakePower, Math.abs(forwardSpeed)) *
+        Math.min(delta * this.config.handbrakePower, absForward) *
         Math.sign(forwardSpeed)
       impulse -= brakeImpulse
     } else if (keys.forward) {
@@ -235,11 +266,16 @@ export class Vehicle {
         // Foot brake while moving backwards
         impulse += this.config.brakingPower * delta
       } else if (forwardSpeed < this.config.maxForwardSpeed) {
-        // Progressive acceleration curve: strong low-end torque tapering smoothly near top speed
-        const speedRatio = Math.min(Math.max(forwardSpeed / this.config.maxForwardSpeed, 0), 1)
-        const torqueFactor =
-          Math.pow(1 - speedRatio, this.config.accelerationCurvePower) * 0.75 + 0.25
-        impulse += this.config.baseAcceleration * torqueFactor * delta
+        if (this.isDrifting) {
+          // Power-slide throttle: delivers continuous drive thrust to power through corners
+          impulse += this.config.baseAcceleration * 0.85 * delta
+        } else {
+          // Progressive acceleration curve: strong low-end torque tapering smoothly near top speed
+          const speedRatio = Math.min(Math.max(forwardSpeed / this.config.maxForwardSpeed, 0), 1)
+          const torqueFactor =
+            Math.pow(1 - speedRatio, this.config.accelerationCurvePower) * 0.75 + 0.25
+          impulse += this.config.baseAcceleration * torqueFactor * delta
+        }
       }
     } else if (keys.backward) {
       if (forwardSpeed > 0.4) {
@@ -252,7 +288,7 @@ export class Vehicle {
     } else {
       // Natural rolling drag & aerodynamic coasting friction
       const dragAmount =
-        Math.min(delta * this.config.coastingDrag, Math.abs(forwardSpeed)) *
+        Math.min(delta * this.config.coastingDrag, absForward) *
         Math.sign(forwardSpeed)
       impulse -= dragAmount
     }
@@ -266,7 +302,7 @@ export class Vehicle {
     // 6. Speed-Sensitive Steering
     // At low speeds, full steering angle is available for sharp 90-degree city turns.
     // At high speeds, sensitivity scales down smoothly to prevent high-speed twitching.
-    const speedRatio = Math.abs(forwardSpeed) / this.config.steeringSpeedDropoff
+    const speedRatio = absForward / this.config.steeringSpeedDropoff
     const speedSteerSensitivity = Math.max(
       1.0 / (1.0 + speedRatio),
       this.config.minSteerSensitivity
@@ -290,11 +326,11 @@ export class Vehicle {
     )
 
     // Apply Yaw Angular Velocity
-    if (Math.abs(forwardSpeed) > 0.1) {
-      const speedFactor = Math.min(Math.abs(forwardSpeed) / 4.8, 1.0)
+    if (absForward > 0.1) {
+      const speedFactor = Math.min(absForward / 4.8, 1.0)
       const directionSign = forwardSpeed >= 0 ? 1 : -1
-      // Mild drift yaw boost when handbrake is engaged
-      const driftMultiplier = keys.handbrake ? 1.25 : 1.0
+      // Drift yaw boost to enhance oversteer and counter-steer control during slides
+      const driftMultiplier = this.isDrifting ? this.config.driftYawMultiplier : 1.0
       const targetAngVel =
         this.currentSteerAngle *
         this.config.baseTurnRate *
@@ -366,7 +402,7 @@ export class Vehicle {
     }
   }
 
-  public reset(spawnX: number = 0, spawnZ: number = 0) {
+  public reset(spawnX: number = 0, spawnZ: number = 0, rotationY: number = 0) {
     if (!this.rigidBody) return
 
     this.currentSpeed = 0
@@ -374,15 +410,27 @@ export class Vehicle {
     this.wheelSpinAngle = 0
     this.currentTraction = this.config.lateralGripNormal
 
+    // Reset drift telemetry
+    this.isDrifting = false
+    this.isHandbrakeActive = false
+    this.slipAngle = 0
+    this.slipAngleDeg = 0
+    this.driftDuration = 0
+    this.currentLateralSpeed = 0
+
+    const halfRot = rotationY / 2
+    const qY = Math.sin(halfRot)
+    const qW = Math.cos(halfRot)
+
     // Reset physics body state
     this.rigidBody.setTranslation({ x: spawnX, y: 0.45, z: spawnZ }, true)
-    this.rigidBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true)
+    this.rigidBody.setRotation({ x: 0, y: qY, z: 0, w: qW }, true)
     this.rigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true)
     this.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
 
     // Reset Three.js transforms
     this.root.position.set(spawnX, 0.02, spawnZ)
-    this.root.rotation.set(0, 0, 0)
+    this.root.rotation.set(0, rotationY, 0)
     this.bodyGroup.rotation.set(0, 0, 0)
 
     if (this.bodyMesh) this.bodyMesh.rotation.set(0, 0, 0)
@@ -394,5 +442,17 @@ export class Vehicle {
 
   public getSpeedKmh(): number {
     return Math.round(Math.abs(this.currentSpeed) * 3.6)
+  }
+
+  public getRearWheelPositions(leftOut: THREE.Vector3, rightOut: THREE.Vector3): void {
+    if (this.wheelBackLeft && this.wheelBackRight) {
+      this.wheelBackLeft.getWorldPosition(leftOut)
+      this.wheelBackRight.getWorldPosition(rightOut)
+    } else {
+      const offsetL = new THREE.Vector3(-0.75, 0.15, -1.15).applyQuaternion(this.root.quaternion)
+      leftOut.copy(this.root.position).add(offsetL)
+      const offsetR = new THREE.Vector3(0.75, 0.15, -1.15).applyQuaternion(this.root.quaternion)
+      rightOut.copy(this.root.position).add(offsetR)
+    }
   }
 }

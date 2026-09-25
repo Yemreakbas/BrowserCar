@@ -10,7 +10,7 @@ export interface VehicleConfig {
 
   // Braking Dynamics
   brakingPower: number // Foot brake deceleration (m/s^2)
-  handbrakePower: number // Handbrake stopping power (m/s^2)
+  handbrakePower: number // Handbrake forward deceleration (m/s^2, balanced for sustained slide)
   coastingDrag: number // Natural rolling resistance & aerodynamic drag
 
   // Steering & Speed-Sensitive Handling
@@ -23,8 +23,12 @@ export interface VehicleConfig {
 
   // Traction & Drift Dynamics
   lateralGripNormal: number // Normal cornering grip factor (0..1, high = tracks wheels strictly)
-  lateralGripDrift: number // Grip while handbrake engaged (allows controllable power-slides)
-  driftGripRecoverySpeed: number // Speed at which traction recovers after handbrake release
+  lateralGripDrift: number // Grip while drifting (allows smooth, controllable power-slides)
+  driftGripRecoverySpeed: number // Speed at which traction recovers after exiting drift
+  driftMinSpeed: number // Minimum speed (m/s) required to initiate/sustain drift (~14 km/h)
+  driftMinAngleDeg: number // Minimum slip angle to register drift (~10 deg)
+  driftMaxAngleDeg: number // Maximum angle before spin-out risk (~80 deg)
+  driftYawMultiplier: number // Angular velocity boost while counter-steering in drift
 
   // Suspension & Visual Body Dynamics
   suspensionPitchMax: number // Max chassis pitch under hard accel/braking (radians)
@@ -44,19 +48,23 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   reverseAcceleration: 11.0,
 
   brakingPower: 30.0, // Strong, predictable foot braking
-  handbrakePower: 38.0, // Sharp handbrake bite
+  handbrakePower: 13.5, // Balanced handbrake deceleration allowing momentum to carry slide
   coastingDrag: 4.8, // Smooth deceleration when coasting
 
   maxSteerAngle: 0.48, // ~27.5 degrees at low speed
   minSteerSensitivity: 0.42, // Steering becomes tighter and stable at high speeds
   steeringSpeedDropoff: 14.0, // Transition begins noticeably above ~50 km/h
-  steerResponseSpeed: 6.0, // Responsive wheel turning
-  steerReturnSpeed: 8.0, // Rapid centering
-  baseTurnRate: 2.1, // Dynamic yaw response
+  steerResponseSpeed: 6.8, // Responsive wheel turning
+  steerReturnSpeed: 8.5, // Rapid centering
+  baseTurnRate: 2.2, // Dynamic yaw response
 
-  lateralGripNormal: 0.94, // Solid grip tracking wheels
-  lateralGripDrift: 0.48, // Smooth slip angle during handbrake slide
-  driftGripRecoverySpeed: 3.5, // Natural grip recovery without sudden snap
+  lateralGripNormal: 0.94, // Solid grip tracking wheels for normal driving
+  lateralGripDrift: 0.24, // Low lateral grip allowing long, beautiful arcade slides
+  driftGripRecoverySpeed: 4.2, // Smooth, predictable grip recovery
+  driftMinSpeed: 4.0, // ~14.4 km/h minimum speed
+  driftMinAngleDeg: 10.0, // 10 degrees slip angle
+  driftMaxAngleDeg: 80.0, // 80 degrees spin-out threshold
+  driftYawMultiplier: 1.35, // Yaw boost during active drift
 
   suspensionPitchMax: 0.045, // Mild squat on acceleration / dive on braking
   suspensionRollMax: 0.08, // Subtle body lean in sharp turns

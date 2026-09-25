@@ -22,6 +22,13 @@ export class PhysicsWorld {
       .setRestitution(0.05)
     this.world.createCollider(groundColliderDesc)
 
+    // Ground plane collider for RaceTrack (at Z = 600)
+    const trackGroundDesc = RAPIER.ColliderDesc.cuboid(250, 1.0, 250)
+      .setTranslation(0, -1.0, 600)
+      .setFriction(0.85)
+      .setRestitution(0.05)
+    this.world.createCollider(trackGroundDesc)
+
     // 3. Add Outer Perimeter Safety Boundaries (prevents driving off world)
     const mapLimit = 88.0
     const wallThickness = 1.0

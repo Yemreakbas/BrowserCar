@@ -332,3 +332,419 @@ body {
     font-size: 38px;
   }
 }
+
+/* ==========================================================================
+   GAME MODE SELECTION MODAL (PHASE 8)
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(11, 15, 25, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-card {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(56, 189, 248, 0.15);
+  border-radius: 20px;
+  max-width: 880px;
+  width: 100%;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  transform: translateY(16px) scale(0.98);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-backdrop.open .modal-card {
+  transform: translateY(0) scale(1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 18px;
+}
+
+.modal-title-group h2 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-title-group p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.modal-close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #f87171;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 768px) {
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mode-card-item {
+  background: rgba(30, 41, 59, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.mode-card-item:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: var(--accent-cyan);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(56, 189, 248, 0.2);
+}
+
+.mode-card-item.active {
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.4);
+}
+
+.mode-icon-badge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mode-icon {
+  font-size: 28px;
+}
+
+.mode-badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: white;
+}
+
+.mode-info h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: 4px;
+}
+
+.mode-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: #38bdf8;
+  margin-bottom: 8px;
+}
+
+.mode-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.mode-action-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 8px;
+  text-align: center;
+  transition: all 0.15s ease;
+  pointer-events: none;
+}
+
+.mode-card-item:hover .mode-action-btn {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  color: #0b0f19;
+}
+
+/* ==========================================================================
+   DRIFT TELEMETRY GLOW & BADGES (PHASE 9)
+   ========================================================================== */
+#drift-telemetry-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#drift-telemetry-card.drifting-active {
+  border-color: rgba(245, 158, 11, 0.85);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.45), 0 12px 36px rgba(0, 0, 0, 0.6);
+  transform: scale(1.02);
+}
+
+#drift-telemetry-card.drifting-active #drift-score-badge {
+  color: #fde047;
+  text-shadow: 0 0 12px rgba(253, 224, 71, 0.7);
+  animation: drift-pulse 0.4s infinite alternate ease-in-out;
+}
+
+@keyframes drift-pulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.05);
+  }
+}
+
+/* ==========================================================================
+   RACE COUNTDOWN, WRONG WAY & RESULTS MODAL (PHASE 11)
+   ========================================================================== */
+.race-countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.race-countdown-text {
+  font-family: var(--font-sans);
+  font-size: 110px;
+  font-weight: 900;
+  color: #ef4444;
+  text-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 0 0 50px currentColor;
+  letter-spacing: 0.05em;
+  animation: countdown-pop 0.6s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
+}
+
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.race-wrong-way {
+  position: fixed;
+  top: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 85;
+  background: rgba(220, 38, 38, 0.92);
+  color: #fef2f2;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 8px 24px;
+  border-radius: 999px;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.8), 0 4px 12px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.05em;
+  animation: wrong-way-pulse 0.4s infinite alternate;
+}
+
+@keyframes wrong-way-pulse {
+  from {
+    opacity: 0.75;
+    transform: translateX(-50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.04);
+  }
+}
+
+.race-results-card {
+  max-width: 520px;
+  text-align: center;
+  gap: 20px;
+}
+
+.results-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.results-trophy {
+  font-size: 48px;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 0 16px rgba(250, 204, 21, 0.6));
+}
+
+.results-header h2 {
+  font-size: 22px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: 0.04em;
+}
+
+.results-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.result-stat-box {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-stat-box.highlight {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.result-stat-box.highlight .stat-value {
+  color: #34d399;
+}
+
+.lap-times-list {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lap-time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #cbd5e1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lap-time-row:last-child {
+  border-bottom: none;
+}
+
+.lap-time-row.fastest-lap {
+  color: #34d399;
+  font-weight: 700;
+}
+
+.results-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.action-btn.primary {
+  background: #2563eb;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background: #1d4ed8;
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.5);
+}
+
+.action-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+}
+
+.action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+
+
