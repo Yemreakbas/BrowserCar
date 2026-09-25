@@ -67,3 +67,23 @@ export interface ServerErrorPayload {
   code: string
   message: string
 }
+
+export interface PlayerStateMessage {
+  playerId: string
+  playerName?: string
+  roomId: string
+  position: [number, number, number]
+  rotation: [number, number, number, number] // [x, y, z, w]
+  velocity: [number, number, number]
+  speed: number
+  steering: number
+  isBraking: boolean
+  isDrifting: boolean
+  timestamp: number
+}
+
+export interface RoomSnapshotPayload {
+  roomId: string
+  serverTime: number
+  states: PlayerStateMessage[]
+}

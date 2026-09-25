@@ -10,6 +10,8 @@ import type {
   PlayerJoinedRoomPayload,
   PlayerLeftRoomPayload,
   ServerErrorPayload,
+  PlayerStateMessage,
+  RoomSnapshotPayload,
 } from '../../shared/src/messages.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -32,6 +34,8 @@ export class NetworkManager {
   private playerJoinedListeners = new Set<(payload: PlayerJoinedRoomPayload) => void>()
   private playerLeftListeners = new Set<(payload: PlayerLeftRoomPayload) => void>()
   private errorListeners = new Set<(err: ServerErrorPayload) => void>()
+  private playerStateListeners = new Set<(state: PlayerStateMessage) => void>()
+  private roomSnapshotListeners = new Set<(snapshot: RoomSnapshotPayload) => void>()
 
   constructor(serverUrl: string = DEFAULT_SERVER_URL) {
     this.serverUrl = serverUrl
@@ -121,6 +125,18 @@ export class NetworkManager {
       }
     })
 
+    this.socket.on(SOCKET_EVENTS.PLAYER_STATE, (state: PlayerStateMessage) => {
+      for (const listener of this.playerStateListeners) {
+        listener(state)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.ROOM_SNAPSHOT, (snapshot: RoomSnapshotPayload) => {
+      for (const listener of this.roomSnapshotListeners) {
+        listener(snapshot)
+      }
+    })
+
     this.socket.on(SOCKET_EVENTS.SERVER_ERROR, (err: ServerErrorPayload) => {
       console.warn(`[NetworkManager] Server error [${err.code}]:`, err.message)
       for (const listener of this.errorListeners) {
@@ -132,6 +148,34 @@ export class NetworkManager {
       console.warn('[NetworkManager] Connect error:', err.message)
       this.setStatus('error')
     })
+  }
+
+  public sendPlayerState(data: {
+    position: [number, number, number]
+    rotation: [number, number, number, number]
+    velocity: [number, number, number]
+    speed: number
+    steering: number
+    isBraking: boolean
+    isDrifting: boolean
+  }): void {
+    if (!this.socket || !this.socket.connected || !this.localPlayerId || !this.currentRoom) return
+
+    const message: PlayerStateMessage = {
+      playerId: this.localPlayerId,
+      playerName: this.localPlayerName,
+      roomId: this.currentRoom.id,
+      position: data.position,
+      rotation: data.rotation,
+      velocity: data.velocity,
+      speed: data.speed,
+      steering: data.steering,
+      isBraking: data.isBraking,
+      isDrifting: data.isDrifting,
+      timestamp: Date.now(),
+    }
+
+    this.socket.emit(SOCKET_EVENTS.PLAYER_STATE, message)
   }
 
   public createRoom(options: { name: string; mode: string; map: string; maxPlayers?: number; playerName?: string }): Promise<RoomInfo> {
@@ -283,5 +327,15 @@ export class NetworkManager {
   public onError(callback: (err: ServerErrorPayload) => void): () => void {
     this.errorListeners.add(callback)
     return () => this.errorListeners.delete(callback)
+  }
+
+  public onPlayerState(callback: (state: PlayerStateMessage) => void): () => void {
+    this.playerStateListeners.add(callback)
+    return () => this.playerStateListeners.delete(callback)
+  }
+
+  public onRoomSnapshot(callback: (snapshot: RoomSnapshotPayload) => void): () => void {
+    this.roomSnapshotListeners.add(callback)
+    return () => this.roomSnapshotListeners.delete(callback)
   }
 }

@@ -11,6 +11,7 @@ import { ModeManager } from './modes/ModeManager.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
+import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -651,8 +652,10 @@ async function bootstrap() {
     openModal()
   })
 
-  // 8. Multiplayer Manager & Modal Management (Phase 12)
+  // 8. Multiplayer Manager & Modal Management (Phase 12 & 13)
   const networkManager = new NetworkManager()
+  const remotePlayerManager = new RemotePlayerManager(scene, networkManager)
+  let netSyncAccumulator = 0
   let isMpModalOpen = false
 
   const openMpModal = () => {
@@ -1019,6 +1022,28 @@ async function bootstrap() {
 
     // 9.4 Tire Smoke Simulation Update (Phase 9)
     tireSmoke.update(delta)
+
+    // 9.4b Remote Players Update & Local Telemetry Sync (Phase 13)
+    remotePlayerManager.update(delta)
+
+    netSyncAccumulator += delta
+    if (netSyncAccumulator >= 0.04) {
+      netSyncAccumulator = 0
+      if (vehicle && vehicle.rigidBody) {
+        const pos = vehicle.root.position
+        const rot = vehicle.root.quaternion
+        const linvel = vehicle.rigidBody.linvel()
+        networkManager.sendPlayerState({
+          position: [pos.x, pos.y, pos.z],
+          rotation: [rot.x, rot.y, rot.z, rot.w],
+          velocity: [linvel.x, linvel.y, linvel.z],
+          speed: vehicle.currentSpeed,
+          steering: vehicle.currentSteerAngle,
+          isBraking: keys.backward,
+          isDrifting: vehicle.isDrifting,
+        })
+      }
+    }
 
     // 9.5 Directional Sunlight Cascade (follows vehicle for sharp local shadows)
     sunLight.position.set(

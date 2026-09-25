@@ -1,7 +1,32 @@
-import type { RoomInfo, PlayerInfo, CreateRoomRequest } from '../../../shared/src/messages.ts'
+import { DEFAULT_GLOBAL_ROOM_ID } from '../../../shared/src/constants.ts'
+import type { RoomInfo, PlayerInfo, CreateRoomRequest, PlayerStateMessage } from '../../../shared/src/messages.ts'
 
 export class RoomManager {
   private rooms = new Map<string, RoomInfo>()
+  private playerStatesByRoom = new Map<string, Map<string, PlayerStateMessage>>()
+
+  constructor() {
+    this.initDefaultRooms()
+  }
+
+  /**
+   * Initialize permanent default rooms (e.g. Global City Free Roam)
+   */
+  public initDefaultRooms(): void {
+    const globalRoom: RoomInfo = {
+      id: DEFAULT_GLOBAL_ROOM_ID,
+      name: 'Şehir Serbest Sürüş (Genel)',
+      mode: 'CITY_FREE_ROAM',
+      map: 'CITY',
+      maxPlayers: 32,
+      currentPlayers: 0,
+      players: [],
+      hostId: 'system',
+      createdAt: Date.now(),
+    }
+    this.rooms.set(DEFAULT_GLOBAL_ROOM_ID, globalRoom)
+    this.playerStatesByRoom.set(DEFAULT_GLOBAL_ROOM_ID, new Map())
+  }
 
   /**
    * Create a new multiplayer room.
@@ -23,6 +48,7 @@ export class RoomManager {
     }
 
     this.rooms.set(roomId, room)
+    this.playerStatesByRoom.set(roomId, new Map())
     return room
   }
 
@@ -58,14 +84,23 @@ export class RoomManager {
       return { success: true, room }
     }
 
-    room.players.push({ ...player, isHost: false })
+    const isHost = room.players.length === 0 && room.id !== DEFAULT_GLOBAL_ROOM_ID
+    room.players.push({ ...player, isHost })
     room.currentPlayers = room.players.length
+
+    if (isHost) {
+      room.hostId = player.id
+    }
+
+    if (!this.playerStatesByRoom.has(roomId)) {
+      this.playerStatesByRoom.set(roomId, new Map())
+    }
 
     return { success: true, room }
   }
 
   /**
-   * Leave a room. Reassigns host if needed or deletes room if empty.
+   * Leave a room. Reassigns host if needed or deletes room if empty (except permanent rooms).
    */
   public leaveRoom(roomId: string, playerId: string): { left: boolean; roomDeleted: boolean; room?: RoomInfo } {
     const room = this.rooms.get(roomId)
@@ -77,8 +112,20 @@ export class RoomManager {
     room.players = room.players.filter(p => p.id !== playerId)
     room.currentPlayers = room.players.length
 
+    // Remove state cache
+    const roomStates = this.playerStatesByRoom.get(roomId)
+    if (roomStates) {
+      roomStates.delete(playerId)
+    }
+
     if (room.players.length === 0) {
+      if (roomId === DEFAULT_GLOBAL_ROOM_ID) {
+        // Permanent room: do not delete, just reset host
+        room.hostId = 'system'
+        return { left: true, roomDeleted: false, room }
+      }
       this.rooms.delete(roomId)
+      this.playerStatesByRoom.delete(roomId)
       return { left: true, roomDeleted: true }
     }
 
@@ -101,5 +148,26 @@ export class RoomManager {
       }
     }
     return undefined
+  }
+
+  /**
+   * Store and update the latest vehicle state for a player in a room.
+   */
+  public updatePlayerState(state: PlayerStateMessage): void {
+    let roomStates = this.playerStatesByRoom.get(state.roomId)
+    if (!roomStates) {
+      roomStates = new Map()
+      this.playerStatesByRoom.set(state.roomId, roomStates)
+    }
+    roomStates.set(state.playerId, state)
+  }
+
+  /**
+   * Get all cached player vehicle states for a given room.
+   */
+  public getRoomSnapshot(roomId: string): PlayerStateMessage[] {
+    const roomStates = this.playerStatesByRoom.get(roomId)
+    if (!roomStates) return []
+    return Array.from(roomStates.values())
   }
 }
