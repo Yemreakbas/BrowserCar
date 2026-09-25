@@ -1,6 +1,12 @@
 import http from 'node:http'
 import { Server as SocketIOServer } from 'socket.io'
-import { DEFAULT_SERVER_PORT, DEFAULT_GLOBAL_ROOM_ID, SOCKET_EVENTS } from '../../shared/src/constants.ts'
+import {
+  DEFAULT_SERVER_PORT,
+  DEFAULT_GLOBAL_ROOM_ID,
+  SERVER_TICK_RATE,
+  SERVER_TICK_INTERVAL_MS,
+  SOCKET_EVENTS,
+} from '../../shared/src/constants.ts'
 import type {
   CreateRoomRequest,
   JoinRoomRequest,
@@ -11,12 +17,14 @@ import type {
   PlayerLeftRoomPayload,
   PlayerStateMessage,
   RoomSnapshotPayload,
+  ReconcilePayload,
 } from '../../shared/src/messages.ts'
 import { PlayerManager } from './players/PlayerManager.ts'
 import { RoomManager } from './rooms/RoomManager.ts'
 
 const PORT = Number(process.env.PORT) || DEFAULT_SERVER_PORT
 const startTime = Date.now()
+let currentServerTick = 0
 
 const playerManager = new PlayerManager()
 const roomManager = new RoomManager()
@@ -42,6 +50,8 @@ const httpServer = http.createServer((req, res) => {
         status: 'ok',
         version: '1.0.0',
         uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
+        serverTick: currentServerTick,
+        tickRateHz: SERVER_TICK_RATE,
         activePlayers: playerManager.getPlayerCount(),
         activeRooms: roomManager.getRoomCount(),
         timestamp: Date.now(),
@@ -56,6 +66,8 @@ const httpServer = http.createServer((req, res) => {
       name: 'BrowserCar Realtime Multiplayer Server',
       status: 'running',
       port: PORT,
+      serverTick: currentServerTick,
+      tickRateHz: SERVER_TICK_RATE,
       healthEndpoint: '/health',
     })
   )
@@ -75,24 +87,35 @@ function broadcastRoomList() {
   io.emit(SOCKET_EVENTS.ROOM_LIST_RESPONSE, roomManager.getAllRooms())
 }
 
-// 3. Socket.IO Connection & Event Handlers
+// 3. Authoritative Server Tick Loop (20 Hz = every 50ms)
+setInterval(() => {
+  currentServerTick++
+  const rooms = roomManager.getAllRooms()
+
+  for (const room of rooms) {
+    if (room.currentPlayers > 0) {
+      const snapshot = roomManager.getRoomSnapshot(room.id, currentServerTick)
+      if (snapshot && snapshot.states.length > 0) {
+        io.to(room.id).emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot)
+      }
+    }
+  }
+}, SERVER_TICK_INTERVAL_MS)
+
+// 4. Socket.IO Connection & Event Handlers
 io.on('connection', socket => {
-  // Register player and assign unique ID
   const player = playerManager.registerPlayer(socket.id)
   console.log(`[Multiplayer] Client connected: socket=${socket.id} -> player=${player.id} (${player.name})`)
 
-  // Send initialization payload
   const initPayload: PlayerInitPayload = {
     playerId: player.id,
     serverTime: Date.now(),
     version: '1.0.0',
   }
   socket.emit(SOCKET_EVENTS.PLAYER_INIT, initPayload)
-
-  // Send room list
   socket.emit(SOCKET_EVENTS.ROOM_LIST_RESPONSE, roomManager.getAllRooms())
 
-  // Auto-join default global city room so two players immediately see each other!
+  // Auto-join default global city room
   const defaultJoin = roomManager.joinRoom(DEFAULT_GLOBAL_ROOM_ID, player)
   if (defaultJoin.success && defaultJoin.room) {
     playerManager.setPlayerRoom(socket.id, DEFAULT_GLOBAL_ROOM_ID)
@@ -104,18 +127,12 @@ io.on('connection', socket => {
     }
     socket.emit(SOCKET_EVENTS.ROOM_JOINED, roomJoinedPayload)
 
-    // Send snapshot of existing players' states in the room to new player
-    const existingStates = roomManager.getRoomSnapshot(DEFAULT_GLOBAL_ROOM_ID)
-    if (existingStates.length > 0) {
-      const snapshot: RoomSnapshotPayload = {
-        roomId: DEFAULT_GLOBAL_ROOM_ID,
-        serverTime: Date.now(),
-        states: existingStates,
-      }
+    // Send initial snapshot of room to new player
+    const snapshot = roomManager.getRoomSnapshot(DEFAULT_GLOBAL_ROOM_ID, currentServerTick)
+    if (snapshot) {
       socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot)
     }
 
-    // Notify other players in the room
     const playerJoinedPayload: PlayerJoinedRoomPayload = {
       roomId: DEFAULT_GLOBAL_ROOM_ID,
       player,
@@ -124,7 +141,7 @@ io.on('connection', socket => {
     socket.to(DEFAULT_GLOBAL_ROOM_ID).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)
   }
 
-  // --- PLAYER: STATE UPDATE (PHASE 13) ---
+  // --- PLAYER: STATE UPDATE & AUTHORITATIVE VALIDATION (PHASE 14) ---
   socket.on(SOCKET_EVENTS.PLAYER_STATE, (state: PlayerStateMessage) => {
     try {
       if (!state || !state.roomId) return
@@ -132,10 +149,28 @@ io.on('connection', socket => {
       if (!currentPlayer || currentPlayer.id !== state.playerId) return
 
       state.playerName = currentPlayer.name
-      roomManager.updatePlayerState(state)
 
-      // Broadcast to other players in the same room
-      socket.to(state.roomId).emit(SOCKET_EVENTS.PLAYER_STATE, state)
+      // Authoritative validation
+      const result = roomManager.validateAndUpdatePlayerState(state, currentServerTick)
+      if (!result.valid || !result.state) return
+
+      // If correction is needed (out-of-bounds, invalid teleport), send reconcile payload
+      if (result.needsCorrection) {
+        const reconcilePayload: ReconcilePayload = {
+          playerId: result.state.playerId,
+          lastProcessedSequence: result.state.lastProcessedSequence,
+          correctedPosition: result.state.position,
+          correctedRotation: result.state.rotation,
+          correctedVelocity: result.state.velocity,
+          serverTick: currentServerTick,
+          serverTime: Date.now(),
+          reason: result.correctionReason,
+        }
+        socket.emit(SOCKET_EVENTS.SERVER_RECONCILE, reconcilePayload)
+      }
+
+      // Forward validated state to other members in the room for immediate responsiveness
+      socket.to(state.roomId).emit(SOCKET_EVENTS.PLAYER_STATE, result.state)
     } catch (err) {
       console.warn('[Multiplayer] Error handling player state update:', err)
     }
@@ -147,7 +182,6 @@ io.on('connection', socket => {
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
       if (!currentPlayer) return
 
-      // Leave previous room if any
       const existingRoom = roomManager.findRoomByPlayerId(currentPlayer.id)
       if (existingRoom) {
         socket.leave(existingRoom.id)
@@ -202,7 +236,6 @@ io.on('connection', socket => {
         currentPlayer.name = data.playerName
       }
 
-      // Check existing room
       const existingRoom = roomManager.findRoomByPlayerId(currentPlayer.id)
       if (existingRoom && existingRoom.id !== data.roomId) {
         socket.leave(existingRoom.id)
@@ -238,17 +271,12 @@ io.on('connection', socket => {
       }
       socket.emit(SOCKET_EVENTS.ROOM_JOINED, roomJoinedPayload)
 
-      // Send snapshot of states in new room to joining player
-      const roomStates = roomManager.getRoomSnapshot(room.id)
-      if (roomStates.length > 0) {
-        socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, {
-          roomId: room.id,
-          serverTime: Date.now(),
-          states: roomStates,
-        })
+      // Send initial snapshot of new room
+      const roomSnapshot = roomManager.getRoomSnapshot(room.id, currentServerTick)
+      if (roomSnapshot) {
+        socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, roomSnapshot)
       }
 
-      // Notify others in room
       const playerJoinedPayload: PlayerJoinedRoomPayload = {
         roomId: room.id,
         player: currentPlayer,
@@ -298,7 +326,7 @@ io.on('connection', socket => {
         socket.to(room.id).emit(SOCKET_EVENTS.PLAYER_LEFT_ROOM, payload)
       }
 
-      // Automatically rejoin the default global city room
+      // Rejoin default global room
       if (room.id !== DEFAULT_GLOBAL_ROOM_ID) {
         const defaultJoin = roomManager.joinRoom(DEFAULT_GLOBAL_ROOM_ID, currentPlayer)
         if (defaultJoin.success && defaultJoin.room) {
@@ -350,12 +378,13 @@ io.on('connection', socket => {
   })
 })
 
-// 4. Start Server
+// 5. Start Server
 httpServer.listen(PORT, () => {
   console.log(`===============================================`)
-  console.log(`🚀 BrowserCar Multiplayer Server is running!`)
+  console.log(`🚀 BrowserCar Authoritative Multiplayer Server is running!`)
   console.log(`📡 URL: http://localhost:${PORT}`)
+  console.log(`⏱️ Tick Rate: ${SERVER_TICK_RATE} Hz (${SERVER_TICK_INTERVAL_MS}ms)`)
   console.log(`🩺 Health check: http://localhost:${PORT}/health`)
-  console.log(`⚡ Ready for player connections & room management`)
+  console.log(`⚡ Ready for authoritative simulation & vehicle sync`)
   console.log(`===============================================`)
 })

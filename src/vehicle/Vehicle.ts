@@ -440,6 +440,30 @@ export class Vehicle {
     if (this.wheelBackRight) this.wheelBackRight.rotation.set(0, 0, 0)
   }
 
+  /**
+   * Reconcile local vehicle state from authoritative server correction (Phase 14).
+   */
+  public reconcile(
+    position: [number, number, number],
+    rotation: [number, number, number, number],
+    velocity?: [number, number, number]
+  ): void {
+    if (!this.rigidBody) return
+
+    this.rigidBody.setTranslation({ x: position[0], y: position[1], z: position[2] }, true)
+    this.rigidBody.setRotation(
+      { x: rotation[0], y: rotation[1], z: rotation[2], w: rotation[3] },
+      true
+    )
+
+    if (velocity) {
+      this.rigidBody.setLinvel({ x: velocity[0], y: velocity[1], z: velocity[2] }, true)
+    }
+
+    this.root.position.set(position[0], position[1], position[2])
+    this.root.quaternion.set(rotation[0], rotation[1], rotation[2], rotation[3])
+  }
+
   public getSpeedKmh(): number {
     return Math.round(Math.abs(this.currentSpeed) * 3.6)
   }

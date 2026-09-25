@@ -1,7 +1,7 @@
 import type * as THREE from 'three'
 import { RemoteVehicle } from '../vehicle/RemoteVehicle.ts'
 import type { NetworkManager } from './NetworkManager.ts'
-import type { PlayerStateMessage, RoomSnapshotPayload } from '../../shared/src/messages.ts'
+import type { PlayerStateMessage, RoomSnapshotPayload, AuthoritativePlayerState } from '../../shared/src/messages.ts'
 
 export class RemotePlayerManager {
   private scene: THREE.Scene
@@ -39,7 +39,7 @@ export class RemotePlayerManager {
     })
   }
 
-  public handlePlayerState(state: PlayerStateMessage): void {
+  public handlePlayerState(state: PlayerStateMessage | AuthoritativePlayerState): void {
     const localId = this.networkManager.getPlayerId()
     if (!localId || state.playerId === localId) return
 

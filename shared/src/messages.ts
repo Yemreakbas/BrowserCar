@@ -79,11 +79,46 @@ export interface PlayerStateMessage {
   steering: number
   isBraking: boolean
   isDrifting: boolean
+  sequence?: number
+  inputs?: {
+    forward: boolean
+    backward: boolean
+    left: boolean
+    right: boolean
+    handbrake: boolean
+  }
+  timestamp: number
+}
+
+export interface AuthoritativePlayerState {
+  playerId: string
+  playerName?: string
+  roomId: string
+  position: [number, number, number]
+  rotation: [number, number, number, number]
+  velocity: [number, number, number]
+  speed: number
+  steering: number
+  isBraking: boolean
+  isDrifting: boolean
+  lastProcessedSequence: number
   timestamp: number
 }
 
 export interface RoomSnapshotPayload {
   roomId: string
+  serverTick: number
   serverTime: number
-  states: PlayerStateMessage[]
+  states: AuthoritativePlayerState[]
+}
+
+export interface ReconcilePayload {
+  playerId: string
+  lastProcessedSequence: number
+  correctedPosition: [number, number, number]
+  correctedRotation: [number, number, number, number]
+  correctedVelocity: [number, number, number]
+  serverTick: number
+  serverTime: number
+  reason?: string
 }

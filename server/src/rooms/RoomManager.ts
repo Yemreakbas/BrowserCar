@@ -1,9 +1,16 @@
 import { DEFAULT_GLOBAL_ROOM_ID } from '../../../shared/src/constants.ts'
-import type { RoomInfo, PlayerInfo, CreateRoomRequest, PlayerStateMessage } from '../../../shared/src/messages.ts'
+import type {
+  RoomInfo,
+  PlayerInfo,
+  CreateRoomRequest,
+  PlayerStateMessage,
+  AuthoritativePlayerState,
+  RoomSnapshotPayload,
+} from '../../../shared/src/messages.ts'
 
 export class RoomManager {
   private rooms = new Map<string, RoomInfo>()
-  private playerStatesByRoom = new Map<string, Map<string, PlayerStateMessage>>()
+  private playerStatesByRoom = new Map<string, Map<string, AuthoritativePlayerState>>()
 
   constructor() {
     this.initDefaultRooms()
@@ -79,7 +86,6 @@ export class RoomManager {
 
     const existingIndex = room.players.findIndex(p => p.id === player.id)
     if (existingIndex !== -1) {
-      // Player already in room, update data
       room.players[existingIndex] = { ...player, isHost: room.players[existingIndex].isHost }
       return { success: true, room }
     }
@@ -120,7 +126,6 @@ export class RoomManager {
 
     if (room.players.length === 0) {
       if (roomId === DEFAULT_GLOBAL_ROOM_ID) {
-        // Permanent room: do not delete, just reset host
         room.hostId = 'system'
         return { left: true, roomDeleted: false, room }
       }
@@ -129,7 +134,6 @@ export class RoomManager {
       return { left: true, roomDeleted: true }
     }
 
-    // If host left, assign host to the first remaining player
     if (room.hostId === playerId && room.players.length > 0) {
       room.players[0].isHost = true
       room.hostId = room.players[0].id
@@ -151,23 +155,111 @@ export class RoomManager {
   }
 
   /**
-   * Store and update the latest vehicle state for a player in a room.
+   * Authoritative validation of incoming client telemetry.
+   * Performs bounds checking, speed/displacement sanity checks, and returns validated state
+   * along with flag indicating if client needs state reconciliation.
    */
-  public updatePlayerState(state: PlayerStateMessage): void {
+  public validateAndUpdatePlayerState(
+    state: PlayerStateMessage,
+    serverTick: number
+  ): { valid: boolean; state?: AuthoritativePlayerState; needsCorrection: boolean; correctionReason?: string } {
+    if (
+      !state.position ||
+      state.position.length !== 3 ||
+      !state.position.every(n => Number.isFinite(n)) ||
+      !state.rotation ||
+      state.rotation.length !== 4 ||
+      !state.rotation.every(n => Number.isFinite(n))
+    ) {
+      return {
+        valid: false,
+        needsCorrection: false,
+      }
+    }
+
     let roomStates = this.playerStatesByRoom.get(state.roomId)
     if (!roomStates) {
       roomStates = new Map()
       this.playerStatesByRoom.set(state.roomId, roomStates)
     }
-    roomStates.set(state.playerId, state)
+
+    const prev = roomStates.get(state.playerId)
+    let validatedPos: [number, number, number] = [...state.position]
+    let validatedRot: [number, number, number, number] = [...state.rotation]
+    let validatedVel: [number, number, number] = state.velocity ? [...state.velocity] : [0, 0, 0]
+    let needsCorrection = false
+    let correctionReason: string | undefined = undefined
+
+    // 1. Playable World Bounds Check (Prevent falling out of world or extreme NaN/teleports)
+    if (
+      validatedPos[1] < -25 ||
+      validatedPos[1] > 200 ||
+      Math.abs(validatedPos[0]) > 1500 ||
+      Math.abs(validatedPos[2]) > 1500
+    ) {
+      validatedPos = [0, 0.45, 0]
+      validatedRot = [0, 0, 0, 1]
+      validatedVel = [0, 0, 0]
+      needsCorrection = true
+      correctionReason = 'OUT_OF_BOUNDS'
+    } else if (prev) {
+      // 2. Displacement & Speed Sanity Check
+      const dt = Math.max(0.01, (state.timestamp - prev.timestamp) / 1000)
+      const dx = state.position[0] - prev.position[0]
+      const dy = state.position[1] - prev.position[1]
+      const dz = state.position[2] - prev.position[2]
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+      // Max allowed speed: ~55 m/s (~200 km/h) + jitter buffer (10 meters)
+      const maxAllowed = 55 * dt + 10.0
+      if (dist > maxAllowed && dist > 35) {
+        const scale = maxAllowed / dist
+        validatedPos = [
+          prev.position[0] + dx * scale,
+          prev.position[1] + dy * scale,
+          prev.position[2] + dz * scale,
+        ]
+        needsCorrection = true
+        correctionReason = 'EXCESSIVE_DISPLACEMENT'
+      }
+    }
+
+    const authState: AuthoritativePlayerState = {
+      playerId: state.playerId,
+      playerName: state.playerName,
+      roomId: state.roomId,
+      position: validatedPos,
+      rotation: validatedRot,
+      velocity: validatedVel,
+      speed: Math.max(-40, Math.min(220, state.speed || 0)),
+      steering: Math.max(-0.65, Math.min(0.65, state.steering || 0)),
+      isBraking: !!state.isBraking,
+      isDrifting: !!state.isDrifting,
+      lastProcessedSequence: state.sequence || 0,
+      timestamp: Date.now(),
+    }
+
+    roomStates.set(state.playerId, authState)
+
+    return {
+      valid: true,
+      state: authState,
+      needsCorrection,
+      correctionReason,
+    }
   }
 
   /**
-   * Get all cached player vehicle states for a given room.
+   * Get authoritative snapshot of all active vehicles in a given room.
    */
-  public getRoomSnapshot(roomId: string): PlayerStateMessage[] {
+  public getRoomSnapshot(roomId: string, serverTick: number): RoomSnapshotPayload | null {
     const roomStates = this.playerStatesByRoom.get(roomId)
-    if (!roomStates) return []
-    return Array.from(roomStates.values())
+    if (!roomStates || roomStates.size === 0) return null
+    return {
+      roomId,
+      serverTick,
+      serverTime: Date.now(),
+      states: Array.from(roomStates.values()),
+    }
   }
 }

@@ -39,9 +39,10 @@ export class RemoteVehicle {
   // Nameplate floating sprite
   private nameplateSprite: THREE.Sprite | null = null
 
-  // Target telemetry for interpolation
+  // Target telemetry for interpolation & dead reckoning
   private targetPosition: THREE.Vector3
   private targetQuaternion: THREE.Quaternion
+  private targetVelocity: THREE.Vector3 = new THREE.Vector3()
   private targetSpeed: number = 0
   private targetSteering: number = 0
   public isBraking: boolean = false
@@ -209,9 +210,12 @@ export class RemoteVehicle {
   /**
    * Receive new authoritative state snapshot and update target targets for interpolation.
    */
-  public setTargetState(state: PlayerStateMessage) {
+  public setTargetState(state: PlayerStateMessage | { position: [number, number, number]; rotation: [number, number, number, number]; velocity?: [number, number, number]; speed?: number; steering?: number; isBraking?: boolean; isDrifting?: boolean; playerName?: string }) {
     this.targetPosition.set(state.position[0], state.position[1], state.position[2])
     this.targetQuaternion.set(state.rotation[0], state.rotation[1], state.rotation[2], state.rotation[3])
+    if (state.velocity) {
+      this.targetVelocity.set(state.velocity[0], state.velocity[1], state.velocity[2])
+    }
     this.targetSpeed = state.speed || 0
     this.targetSteering = state.steering || 0
     this.isBraking = !!state.isBraking
@@ -227,7 +231,7 @@ export class RemoteVehicle {
   }
 
   /**
-   * Update remote vehicle position and wheels every frame using smooth interpolation.
+   * Update remote vehicle position and wheels every frame using smooth interpolation and dead-reckoning.
    */
   public update(delta: number) {
     const dist = this.root.position.distanceTo(this.targetPosition)
@@ -237,8 +241,13 @@ export class RemoteVehicle {
       this.root.position.copy(this.targetPosition)
       this.root.quaternion.copy(this.targetQuaternion)
     } else {
+      // Dead reckoning extrapolation between server snapshot ticks
+      if (this.targetVelocity.lengthSq() > 0.05) {
+        this.targetPosition.addScaledVector(this.targetVelocity, delta * 0.4)
+      }
+
       // Smooth lerp and slerp
-      const lerpFactor = Math.min(1, delta * 14)
+      const lerpFactor = Math.min(1, delta * 15)
       this.root.position.lerp(this.targetPosition, lerpFactor)
       this.root.quaternion.slerp(this.targetQuaternion, lerpFactor)
     }

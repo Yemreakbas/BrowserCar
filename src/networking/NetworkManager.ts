@@ -12,6 +12,7 @@ import type {
   ServerErrorPayload,
   PlayerStateMessage,
   RoomSnapshotPayload,
+  ReconcilePayload,
 } from '../../shared/src/messages.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -26,6 +27,15 @@ export class NetworkManager {
   private currentRoom: RoomInfo | null = null
   private availableRooms: RoomInfo[] = []
 
+  // Sequence tracking & client prediction history (Phase 14)
+  private sequenceNumber: number = 0
+  private pendingStates: Array<{
+    sequence: number
+    position: [number, number, number]
+    rotation: [number, number, number, number]
+    timestamp: number
+  }> = []
+
   // Event Listeners
   private statusListeners = new Set<(status: NetworkStatus, playerId?: string) => void>()
   private roomsListeners = new Set<(rooms: RoomInfo[]) => void>()
@@ -36,6 +46,7 @@ export class NetworkManager {
   private errorListeners = new Set<(err: ServerErrorPayload) => void>()
   private playerStateListeners = new Set<(state: PlayerStateMessage) => void>()
   private roomSnapshotListeners = new Set<(snapshot: RoomSnapshotPayload) => void>()
+  private reconcileListeners = new Set<(payload: ReconcilePayload) => void>()
 
   constructor(serverUrl: string = DEFAULT_SERVER_URL) {
     this.serverUrl = serverUrl
@@ -137,6 +148,13 @@ export class NetworkManager {
       }
     })
 
+    this.socket.on(SOCKET_EVENTS.SERVER_RECONCILE, (payload: ReconcilePayload) => {
+      this.pendingStates = this.pendingStates.filter(s => s.sequence > payload.lastProcessedSequence)
+      for (const listener of this.reconcileListeners) {
+        listener(payload)
+      }
+    })
+
     this.socket.on(SOCKET_EVENTS.SERVER_ERROR, (err: ServerErrorPayload) => {
       console.warn(`[NetworkManager] Server error [${err.code}]:`, err.message)
       for (const listener of this.errorListeners) {
@@ -158,8 +176,17 @@ export class NetworkManager {
     steering: number
     isBraking: boolean
     isDrifting: boolean
+    inputs?: {
+      forward: boolean
+      backward: boolean
+      left: boolean
+      right: boolean
+      handbrake: boolean
+    }
   }): void {
     if (!this.socket || !this.socket.connected || !this.localPlayerId || !this.currentRoom) return
+
+    this.sequenceNumber++
 
     const message: PlayerStateMessage = {
       playerId: this.localPlayerId,
@@ -172,8 +199,18 @@ export class NetworkManager {
       steering: data.steering,
       isBraking: data.isBraking,
       isDrifting: data.isDrifting,
+      sequence: this.sequenceNumber,
+      inputs: data.inputs,
       timestamp: Date.now(),
     }
+
+    this.pendingStates.push({
+      sequence: this.sequenceNumber,
+      position: data.position,
+      rotation: data.rotation,
+      timestamp: message.timestamp,
+    })
+    if (this.pendingStates.length > 60) this.pendingStates.shift()
 
     this.socket.emit(SOCKET_EVENTS.PLAYER_STATE, message)
   }
@@ -337,5 +374,10 @@ export class NetworkManager {
   public onRoomSnapshot(callback: (snapshot: RoomSnapshotPayload) => void): () => void {
     this.roomSnapshotListeners.add(callback)
     return () => this.roomSnapshotListeners.delete(callback)
+  }
+
+  public onReconcile(callback: (payload: ReconcilePayload) => void): () => void {
+    this.reconcileListeners.add(callback)
+    return () => this.reconcileListeners.delete(callback)
   }
 }

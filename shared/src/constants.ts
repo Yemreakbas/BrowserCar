@@ -2,6 +2,11 @@ export const DEFAULT_SERVER_PORT = 3001
 export const DEFAULT_SERVER_URL = `http://localhost:${DEFAULT_SERVER_PORT}`
 export const DEFAULT_GLOBAL_ROOM_ID = 'room_city_global'
 
+export const SERVER_TICK_RATE = 20 // 20 Hz = 50ms tick interval
+export const SERVER_TICK_INTERVAL_MS = 1000 / SERVER_TICK_RATE // 50ms
+export const CLIENT_SEND_RATE = 20 // 20 Hz
+export const CLIENT_SEND_INTERVAL_MS = 1000 / CLIENT_SEND_RATE // 50ms
+
 export const SOCKET_EVENTS = {
   // Connection / lifecycle
   CONNECT: 'connect',
@@ -22,9 +27,10 @@ export const SOCKET_EVENTS = {
   PLAYER_JOINED_ROOM: 'room:player_joined',
   PLAYER_LEFT_ROOM: 'room:player_left',
 
-  // Player state sync (Phase 13)
+  // Player state & authoritative sync (Phase 13 & 14)
   PLAYER_STATE: 'player:state',
   ROOM_SNAPSHOT: 'room:snapshot',
+  SERVER_RECONCILE: 'player:reconcile',
 
   // Errors / alerts
   SERVER_ERROR: 'server:error',

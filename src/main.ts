@@ -885,6 +885,20 @@ async function bootstrap() {
     renderRoomView(payload.room)
   })
 
+  // Authoritative State Reconciliation (Phase 14)
+  networkManager.onReconcile((payload) => {
+    const currentPos = vehicle.root.position
+    const dx = currentPos.x - payload.correctedPosition[0]
+    const dy = currentPos.y - payload.correctedPosition[1]
+    const dz = currentPos.z - payload.correctedPosition[2]
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    if (dist > 1.2) {
+      console.log(`[Reconciliation] Local vehicle position reconciled with authoritative server (dist: ${dist.toFixed(2)}m, reason: ${payload.reason || 'desync'})`)
+      vehicle.reconcile(payload.correctedPosition, payload.correctedRotation, payload.correctedVelocity)
+    }
+  })
+
   // Start connection
   networkManager.connect()
 
@@ -1027,7 +1041,7 @@ async function bootstrap() {
     remotePlayerManager.update(delta)
 
     netSyncAccumulator += delta
-    if (netSyncAccumulator >= 0.04) {
+    if (netSyncAccumulator >= 0.05) {
       netSyncAccumulator = 0
       if (vehicle && vehicle.rigidBody) {
         const pos = vehicle.root.position
@@ -1041,6 +1055,13 @@ async function bootstrap() {
           steering: vehicle.currentSteerAngle,
           isBraking: keys.backward,
           isDrifting: vehicle.isDrifting,
+          inputs: {
+            forward: keys.forward,
+            backward: keys.backward,
+            left: keys.left,
+            right: keys.right,
+            handbrake: keys.handbrake,
+          },
         })
       }
     }
