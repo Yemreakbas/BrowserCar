@@ -1,5 +1,7 @@
 import './style.css'
 import * as THREE from 'three'
+import { Vehicle, type VehicleInput } from './vehicle/Vehicle.ts'
+import { CityWorld } from './world/CityWorld.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -10,7 +12,7 @@ app.innerHTML = `
       <div class="brand-badge">
         <span class="status-dot"></span>
         <span class="brand-title">BrowserCar 3D</span>
-        <span class="brand-subtitle">Prototype</span>
+        <span id="hud-asset-status" class="brand-subtitle">Phase 3 • Kenney Assets</span>
       </div>
       <button id="btn-reset" class="reset-btn" type="button" title="Arabayı Başlangıç Konumuna Getir (R)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -77,11 +79,12 @@ const keyA = document.querySelector<HTMLDivElement>('#key-a')!
 const keyS = document.querySelector<HTMLDivElement>('#key-s')!
 const keyD = document.querySelector<HTMLDivElement>('#key-d')!
 const btnReset = document.querySelector<HTMLButtonElement>('#btn-reset')!
+const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
 
 // --- 2. THREE.JS SCENE SETUP ---
 const scene = new THREE.Scene()
-scene.background = new THREE.Color(0xa8cded)
-scene.fog = new THREE.Fog(0xa8cded, 50, 220)
+scene.background = new THREE.Color(0x93c5fd) // Soft sky blue
+scene.fog = new THREE.Fog(0x93c5fd, 60, 240)
 
 // --- 3. CAMERA SETUP ---
 const camera = new THREE.PerspectiveCamera(
@@ -98,315 +101,54 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.toneMapping = THREE.ACESFilmicToneMapping
-renderer.toneMappingExposure = 1.05
+renderer.toneMappingExposure = 1.1
 
 const container = document.querySelector<HTMLDivElement>('#canvas-container')!
 container.appendChild(renderer.domElement)
 
 // --- 5. LIGHTING SETUP ---
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.75)
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
 scene.add(ambientLight)
 
-const hemisphereLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.55)
+const hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0x1e293b, 0.6)
 scene.add(hemisphereLight)
 
-const sunLight = new THREE.DirectionalLight(0xfffef5, 2.2)
-sunLight.position.set(35, 55, 30)
+const sunLight = new THREE.DirectionalLight(0xfffef5, 2.4)
+sunLight.position.set(45, 65, 35)
 sunLight.castShadow = true
 sunLight.shadow.mapSize.width = 2048
 sunLight.shadow.mapSize.height = 2048
 sunLight.shadow.camera.near = 1.0
-sunLight.shadow.camera.far = 160
-sunLight.shadow.camera.left = -40
-sunLight.shadow.camera.right = 40
-sunLight.shadow.camera.top = 40
-sunLight.shadow.camera.bottom = -40
-sunLight.shadow.bias = -0.0006
+sunLight.shadow.camera.far = 180
+sunLight.shadow.camera.left = -50
+sunLight.shadow.camera.right = 50
+sunLight.shadow.camera.top = 50
+sunLight.shadow.camera.bottom = -50
+sunLight.shadow.bias = -0.0005
 scene.add(sunLight)
 scene.add(sunLight.target)
 
-// --- 6. ENVIRONMENT & GROUND ---
-// Ground Plane
-const groundSize = 600
-const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize)
-const groundMat = new THREE.MeshStandardMaterial({
-  color: 0x1e242d,
-  roughness: 0.88,
-  metalness: 0.12,
+// --- 6. INITIALIZE KENNEY CITY WORLD ---
+new CityWorld(scene, () => {
+  console.log('✓ City environment ready')
 })
-const ground = new THREE.Mesh(groundGeo, groundMat)
-ground.rotation.x = -Math.PI / 2
-ground.receiveShadow = true
-scene.add(ground)
 
-// Subtle Ground Grid Helper
-const gridHelper = new THREE.GridHelper(groundSize, 120, 0x475569, 0x2e3846)
-gridHelper.position.y = 0.01
-scene.add(gridHelper)
+// --- 7. INITIALIZE KENNEY VEHICLE ---
+const vehicle = new Vehicle(scene, () => {
+  hudAssetStatus.textContent = 'Kenney Sports Car • Ready'
+  hudAssetStatus.style.color = '#34d399'
+})
 
-// Central Plaza & Slalom Course
-function createTrackMarkers() {
-  const markerGroup = new THREE.Group()
-
-  // Center Spawn Pad (Ring)
-  const padGeo = new THREE.RingGeometry(8, 8.4, 48)
-  const padMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide })
-  const padMesh = new THREE.Mesh(padGeo, padMat)
-  padMesh.rotation.x = -Math.PI / 2
-  padMesh.position.y = 0.02
-  markerGroup.add(padMesh)
-
-  // Slalom Cones along the course
-  const coneGeo = new THREE.ConeGeometry(0.35, 0.8, 16)
-  const coneMat = new THREE.MeshStandardMaterial({
-    color: 0xff6b35,
-    roughness: 0.4,
-    metalness: 0.1,
-  })
-  const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
-  const stripeGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.16, 16)
-
-  const coneZPositions = [15, 26, 37, 48, 59, 70, 81]
-  coneZPositions.forEach((zPos, index) => {
-    const coneGroup = new THREE.Group()
-    const cone = new THREE.Mesh(coneGeo, coneMat)
-    cone.position.y = 0.4
-    cone.castShadow = true
-    cone.receiveShadow = true
-    coneGroup.add(cone)
-
-    const stripe = new THREE.Mesh(stripeGeo, stripeMat)
-    stripe.position.y = 0.38
-    coneGroup.add(stripe)
-
-    // Alternate left and right for slalom practice
-    const xOffset = (index % 2 === 0 ? 1 : -1) * 3.5
-    coneGroup.position.set(xOffset, 0, zPos)
-    markerGroup.add(coneGroup)
-  })
-
-  // Distance markers along the straight track
-  for (let z = 100; z <= 240; z += 35) {
-    const barrierGeo = new THREE.BoxGeometry(0.6, 0.6, 2.5)
-    const barrierMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 })
-
-    const leftBarrier = new THREE.Mesh(barrierGeo, barrierMat)
-    leftBarrier.position.set(-10, 0.3, z)
-    leftBarrier.castShadow = true
-    leftBarrier.receiveShadow = true
-    markerGroup.add(leftBarrier)
-
-    const rightBarrier = new THREE.Mesh(barrierGeo, barrierMat)
-    rightBarrier.position.set(10, 0.3, z)
-    rightBarrier.castShadow = true
-    rightBarrier.receiveShadow = true
-    markerGroup.add(rightBarrier)
+// Check if vehicle encounters an error
+setTimeout(() => {
+  if (vehicle.loadError) {
+    hudAssetStatus.textContent = 'HATA: ' + vehicle.loadError
+    hudAssetStatus.style.color = '#ef4444'
   }
-
-  scene.add(markerGroup)
-}
-createTrackMarkers()
-
-// --- 7. LOW-POLY CAR CONSTRUCTION ---
-const car = new THREE.Group()
-car.position.set(0, 0, 0)
-scene.add(car)
-
-// Body tilted/roll child group (allows suspension lean when cornering/braking)
-const carBody = new THREE.Group()
-car.add(carBody)
-
-// Color Materials
-const paintMaterial = new THREE.MeshStandardMaterial({
-  color: 0x2563eb, // Sporty Royal Blue
-  roughness: 0.35,
-  metalness: 0.3,
-})
-
-const cabinGlassMaterial = new THREE.MeshStandardMaterial({
-  color: 0x0f172a, // Dark tinted glass
-  roughness: 0.15,
-  metalness: 0.85,
-})
-
-const trimMaterial = new THREE.MeshStandardMaterial({
-  color: 0x111827, // Dark matte trim
-  roughness: 0.7,
-})
-
-const headlightMaterial = new THREE.MeshStandardMaterial({
-  color: 0xfffbe8,
-  emissive: 0xffeed0,
-  emissiveIntensity: 1.8,
-  roughness: 0.2,
-})
-
-const taillightMaterial = new THREE.MeshStandardMaterial({
-  color: 0xff1e1e,
-  emissive: 0xff0020,
-  emissiveIntensity: 1.6,
-  roughness: 0.2,
-})
-
-// 7.1 Chassis / Lower Body
-const chassisGeo = new THREE.BoxGeometry(1.8, 0.48, 4.0)
-const chassisMesh = new THREE.Mesh(chassisGeo, paintMaterial)
-chassisMesh.position.y = 0.5
-chassisMesh.castShadow = true
-chassisMesh.receiveShadow = true
-carBody.add(chassisMesh)
-
-// 7.2 Cabin / Cockpit
-const cabinGeo = new THREE.BoxGeometry(1.35, 0.48, 2.1)
-const cabinMesh = new THREE.Mesh(cabinGeo, cabinGlassMaterial)
-cabinMesh.position.set(0, 0.92, -0.2)
-cabinMesh.castShadow = true
-cabinMesh.receiveShadow = true
-carBody.add(cabinMesh)
-
-// Cabin Roof Cap
-const roofGeo = new THREE.BoxGeometry(1.36, 0.08, 1.7)
-const roofMesh = new THREE.Mesh(roofGeo, paintMaterial)
-roofMesh.position.set(0, 1.18, -0.2)
-roofMesh.castShadow = true
-carBody.add(roofMesh)
-
-// 7.3 Aerodynamic Hood Scoop & Bumpers
-const hoodSlopeGeo = new THREE.BoxGeometry(1.4, 0.14, 1.1)
-const hoodSlopeMesh = new THREE.Mesh(hoodSlopeGeo, paintMaterial)
-hoodSlopeMesh.position.set(0, 0.76, 1.1)
-hoodSlopeMesh.rotation.x = 0.1
-hoodSlopeMesh.castShadow = true
-carBody.add(hoodSlopeMesh)
-
-// Front Bumper / Splitter
-const frontSplitterGeo = new THREE.BoxGeometry(1.84, 0.18, 0.3)
-const frontSplitterMesh = new THREE.Mesh(frontSplitterGeo, trimMaterial)
-frontSplitterMesh.position.set(0, 0.32, 2.05)
-frontSplitterMesh.castShadow = true
-carBody.add(frontSplitterMesh)
-
-// Rear Bumper / Diffuser
-const rearDiffuserGeo = new THREE.BoxGeometry(1.84, 0.22, 0.26)
-const rearDiffuserMesh = new THREE.Mesh(rearDiffuserGeo, trimMaterial)
-rearDiffuserMesh.position.set(0, 0.35, -2.03)
-rearDiffuserMesh.castShadow = true
-carBody.add(rearDiffuserMesh)
-
-// Rear Spoiler
-const wingGeo = new THREE.BoxGeometry(1.5, 0.06, 0.32)
-const wingMesh = new THREE.Mesh(wingGeo, trimMaterial)
-wingMesh.position.set(0, 1.1, -1.82)
-wingMesh.castShadow = true
-carBody.add(wingMesh)
-
-const strutGeo = new THREE.BoxGeometry(0.06, 0.3, 0.1)
-const leftStrut = new THREE.Mesh(strutGeo, trimMaterial)
-leftStrut.position.set(0.5, 0.94, -1.82)
-leftStrut.castShadow = true
-carBody.add(leftStrut)
-
-const rightStrut = new THREE.Mesh(strutGeo, trimMaterial)
-rightStrut.position.set(-0.5, 0.94, -1.82)
-rightStrut.castShadow = true
-carBody.add(rightStrut)
-
-// 7.4 Headlights & Taillights
-// In vehicle coordinates (+Z forward): +X is Left, -X is Right
-const headlightGeo = new THREE.BoxGeometry(0.36, 0.14, 0.08)
-const leftHeadlight = new THREE.Mesh(headlightGeo, headlightMaterial)
-leftHeadlight.position.set(0.62, 0.52, 2.02)
-carBody.add(leftHeadlight)
-
-const rightHeadlight = new THREE.Mesh(headlightGeo, headlightMaterial)
-rightHeadlight.position.set(-0.62, 0.52, 2.02)
-carBody.add(rightHeadlight)
-
-const taillightGeo = new THREE.BoxGeometry(0.38, 0.12, 0.08)
-const leftTaillight = new THREE.Mesh(taillightGeo, taillightMaterial)
-leftTaillight.position.set(0.62, 0.54, -2.02)
-carBody.add(leftTaillight)
-
-const rightTaillight = new THREE.Mesh(taillightGeo, taillightMaterial)
-rightTaillight.position.set(-0.62, 0.54, -2.02)
-carBody.add(rightTaillight)
-
-// 7.5 Wheels Setup
-const wheelRadius = 0.38
-const wheelWidth = 0.28
-const tireMaterial = new THREE.MeshStandardMaterial({
-  color: 0x17171b,
-  roughness: 0.85,
-  metalness: 0.1,
-})
-const rimMaterial = new THREE.MeshStandardMaterial({
-  color: 0xd8e0e8,
-  metalness: 0.9,
-  roughness: 0.25,
-})
-
-function buildWheelMesh(): THREE.Group {
-  const wheelGroup = new THREE.Group()
-
-  // Tire cylinder
-  const tireGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 24)
-  tireGeo.rotateZ(Math.PI / 2)
-  const tireMesh = new THREE.Mesh(tireGeo, tireMaterial)
-  tireMesh.castShadow = true
-  tireMesh.receiveShadow = true
-  wheelGroup.add(tireMesh)
-
-  // Rim cylinder
-  const rimGeo = new THREE.CylinderGeometry(wheelRadius * 0.62, wheelRadius * 0.62, wheelWidth + 0.02, 16)
-  rimGeo.rotateZ(Math.PI / 2)
-  const rimMesh = new THREE.Mesh(rimGeo, rimMaterial)
-  rimMesh.castShadow = true
-  wheelGroup.add(rimMesh)
-
-  // Center hubcap
-  const hubGeo = new THREE.CylinderGeometry(0.08, 0.08, wheelWidth + 0.04, 12)
-  hubGeo.rotateZ(Math.PI / 2)
-  const hubMesh = new THREE.Mesh(hubGeo, paintMaterial)
-  wheelGroup.add(hubMesh)
-
-  return wheelGroup
-}
-
-// Wheel Positions (Vehicle Left: +X, Vehicle Right: -X)
-const wheelTrackX = 0.98
-const wheelBaseZ = 1.28
-const wheelPosY = wheelRadius
-
-// Front Steerable Wheels (pivoting on Y)
-const frontLeftPivot = new THREE.Group()
-frontLeftPivot.position.set(wheelTrackX, wheelPosY, wheelBaseZ)
-const frontLeftWheel = buildWheelMesh()
-frontLeftPivot.add(frontLeftWheel)
-car.add(frontLeftPivot)
-
-const frontRightPivot = new THREE.Group()
-frontRightPivot.position.set(-wheelTrackX, wheelPosY, wheelBaseZ)
-const frontRightWheel = buildWheelMesh()
-frontRightPivot.add(frontRightWheel)
-car.add(frontRightPivot)
-
-// Rear Wheels
-const rearLeftPivot = new THREE.Group()
-rearLeftPivot.position.set(wheelTrackX, wheelPosY, -wheelBaseZ)
-const rearLeftWheel = buildWheelMesh()
-rearLeftPivot.add(rearLeftWheel)
-car.add(rearLeftPivot)
-
-const rearRightPivot = new THREE.Group()
-rearRightPivot.position.set(-wheelTrackX, wheelPosY, -wheelBaseZ)
-const rearRightWheel = buildWheelMesh()
-rearRightPivot.add(rearRightWheel)
-car.add(rearRightPivot)
-
-const allWheelMeshes = [frontLeftWheel, frontRightWheel, rearLeftWheel, rearRightWheel]
+}, 3000)
 
 // --- 8. KEYBOARD & INPUT SYSTEM ---
-const keys = {
+const keys: VehicleInput = {
   forward: false,
   backward: false,
   left: false,
@@ -442,7 +184,7 @@ window.addEventListener('keydown', (e) => {
       keys.handbrake = true
       break
     case 'KeyR':
-      resetCar()
+      vehicle.reset()
       break
   }
 })
@@ -476,39 +218,13 @@ window.addEventListener('keyup', (e) => {
 })
 
 btnReset.addEventListener('click', () => {
-  resetCar()
+  vehicle.reset()
 })
 
-// --- 9. CAR VEHICLE DYNAMICS ---
-let currentSpeed = 0
-let currentSteerAngle = 0
-let wheelSpinAngle = 0
-
-// Physics tuning parameters
-const MAX_FORWARD_SPEED = 28.0 // ~101 km/h
-const MAX_REVERSE_SPEED = -11.0 // ~40 km/h
-const ACCELERATION = 16.0 // Forward acceleration rate
-const REVERSE_ACCEL = 10.0 // Reverse acceleration rate
-const BRAKING_POWER = 26.0 // Foot brake power
-const HANDBRAKE_POWER = 38.0 // Handbrake friction
-const DRAG = 5.5 // Natural rolling friction / aerodynamic drag
-const MAX_STEER_ANGLE = 0.52 // Front wheel angle in radians (~30 deg)
-const STEER_SPEED = 4.5 // Steering response speed
-const TURN_RATE = 1.85 // Car yaw turning rate
-
-function resetCar() {
-  currentSpeed = 0
-  currentSteerAngle = 0
-  car.position.set(0, 0, 0)
-  car.rotation.set(0, 0, 0)
-  carBody.rotation.set(0, 0, 0)
-  frontLeftPivot.rotation.y = 0
-  frontRightPivot.rotation.y = 0
-}
-
-// Camera Follow Variables
-const cameraOffset = new THREE.Vector3(0, 3.8, -8.2)
-const cameraLookAtLead = 2.4
+// --- 9. CHASE CAMERA SETUP ---
+// Following the vehicle root (+Z forward, camera at -Z behind the vehicle)
+const cameraOffset = new THREE.Vector3(0, 3.8, -8.4)
+const cameraLookAtLead = 2.5
 const currentLookAt = new THREE.Vector3(0, 1.2, 0)
 let cameraInitialized = false
 
@@ -521,103 +237,26 @@ function animate() {
   // Delta time capped to prevent large jumps on tab switch
   const delta = Math.min(clock.getDelta(), 0.05)
 
-  // 10.1 Acceleration & Braking Calculation
-  if (keys.handbrake) {
-    if (Math.abs(currentSpeed) < HANDBRAKE_POWER * delta) {
-      currentSpeed = 0
-    } else if (currentSpeed > 0) {
-      currentSpeed -= HANDBRAKE_POWER * delta
-    } else {
-      currentSpeed += HANDBRAKE_POWER * delta
-    }
-  } else if (keys.forward) {
-    if (currentSpeed < 0) {
-      // Braking while reversing
-      currentSpeed += BRAKING_POWER * delta
-    } else {
-      // Accelerating forward
-      currentSpeed = Math.min(currentSpeed + ACCELERATION * delta, MAX_FORWARD_SPEED)
-    }
-  } else if (keys.backward) {
-    if (currentSpeed > 0) {
-      // Braking while going forward
-      currentSpeed = Math.max(currentSpeed - BRAKING_POWER * delta, 0)
-    } else {
-      // Reversing
-      currentSpeed = Math.max(currentSpeed - REVERSE_ACCEL * delta, MAX_REVERSE_SPEED)
-    }
-  } else {
-    // Coasting Drag / Friction
-    if (Math.abs(currentSpeed) < DRAG * delta) {
-      currentSpeed = 0
-    } else if (currentSpeed > 0) {
-      currentSpeed -= DRAG * delta
-    } else {
-      currentSpeed += DRAG * delta
-    }
-  }
+  // 10.1 Vehicle physics update (acceleration, steering, rolling wheels, suspension)
+  vehicle.update(delta, keys)
 
-  // 10.2 Steering Transition
-  // In car coordinate space (+Z forward):
-  // +X is vehicle Left, -X is vehicle Right.
-  // Positive steering angle (+Y rotation) directs front wheels to the Left (+X).
-  // Negative steering angle (-Y rotation) directs front wheels to the Right (-X).
-  let targetSteer = 0
-  if (keys.left) targetSteer += 1.0  // A / ArrowLeft -> Turn Left (+steer)
-  if (keys.right) targetSteer -= 1.0 // D / ArrowRight -> Turn Right (-steer)
-
-  currentSteerAngle = THREE.MathUtils.lerp(
-    currentSteerAngle,
-    targetSteer * MAX_STEER_ANGLE,
-    1 - Math.exp(-STEER_SPEED * delta)
+  // 10.2 Directional Sunlight Cascade (centers on car for crisp shadows anywhere in city)
+  sunLight.position.set(
+    vehicle.root.position.x + 45,
+    65,
+    vehicle.root.position.z + 35
   )
-
-  // Visually pivot front wheels
-  frontLeftPivot.rotation.y = currentSteerAngle
-  frontRightPivot.rotation.y = currentSteerAngle
-
-  // 10.3 Car Heading Rotation & Position Translation
-  if (Math.abs(currentSpeed) > 0.05) {
-    // Normalized speed factor so car steers progressively with movement
-    const speedFactor = Math.min(Math.abs(currentSpeed) / 5.0, 1.0)
-    const directionSign = currentSpeed >= 0 ? 1 : -1
-
-    // Yaw rotation: positive angle rotates heading towards +X (Left), negative towards -X (Right)
-    car.rotation.y += currentSteerAngle * TURN_RATE * speedFactor * directionSign * delta
-  }
-
-  // Forward movement along current car heading
-  const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(
-    new THREE.Vector3(0, 1, 0),
-    car.rotation.y
-  )
-  car.position.addScaledVector(forward, currentSpeed * delta)
-
-  // 10.4 Wheel Rolling Animation
-  const distanceTravelled = currentSpeed * delta
-  wheelSpinAngle += distanceTravelled / wheelRadius
-  for (const wheel of allWheelMeshes) {
-    wheel.rotation.x = wheelSpinAngle
-  }
-
-  // 10.5 Dynamic Body Tilt (Suspension Pitch & Roll)
-  const targetPitch = (keys.forward ? -0.04 : (keys.backward ? 0.05 : 0)) * (Math.abs(currentSpeed) / MAX_FORWARD_SPEED)
-  // Centrifugal roll: steering left (currentSteerAngle > 0) leans car body outward towards Right (-X, positive Z rotation)
-  const targetRoll = currentSteerAngle * 0.08 * (Math.abs(currentSpeed) / MAX_FORWARD_SPEED)
-  carBody.rotation.x = THREE.MathUtils.lerp(carBody.rotation.x, targetPitch, 0.15)
-  carBody.rotation.z = THREE.MathUtils.lerp(carBody.rotation.z, targetRoll, 0.15)
-
-  // 10.6 Directional Sunlight Cascade (stays centered on car for crisp shadows)
-  sunLight.position.set(car.position.x + 35, 55, car.position.z + 30)
-  sunLight.target.position.copy(car.position)
+  sunLight.target.position.copy(vehicle.root.position)
   sunLight.target.updateMatrixWorld()
 
-  // 10.7 Smooth Third-Person Chase Camera
-  const desiredCamOffset = cameraOffset.clone().applyQuaternion(car.quaternion)
-  const targetCamPosition = car.position.clone().add(desiredCamOffset)
+  // 10.3 Smooth Third-Person Chase Camera
+  const desiredCamOffset = cameraOffset.clone().applyQuaternion(vehicle.root.quaternion)
+  const targetCamPosition = vehicle.root.position.clone().add(desiredCamOffset)
 
-  const desiredLookAtOffset = new THREE.Vector3(0, 1.2, cameraLookAtLead).applyQuaternion(car.quaternion)
-  const targetLookAt = car.position.clone().add(desiredLookAtOffset)
+  const desiredLookAtOffset = new THREE.Vector3(0, 1.2, cameraLookAtLead).applyQuaternion(
+    vehicle.root.quaternion
+  )
+  const targetLookAt = vehicle.root.position.clone().add(desiredLookAtOffset)
 
   if (!cameraInitialized) {
     camera.position.copy(targetCamPosition)
@@ -625,24 +264,24 @@ function animate() {
     camera.lookAt(currentLookAt)
     cameraInitialized = true
   } else {
-    // Frame-rate independent smooth lerp
+    // Frame-rate independent smooth camera lag
     const camLerpAlpha = 1 - Math.exp(-6.5 * delta)
     camera.position.lerp(targetCamPosition, camLerpAlpha)
     currentLookAt.lerp(targetLookAt, camLerpAlpha)
     camera.lookAt(currentLookAt)
   }
 
-  // 10.8 HUD Update
-  const speedKmh = Math.round(Math.abs(currentSpeed) * 3.6)
+  // 10.4 HUD Update
+  const speedKmh = vehicle.getSpeedKmh()
   hudSpeed.textContent = speedKmh.toString()
 
-  const speedPercent = Math.min(speedKmh / (MAX_FORWARD_SPEED * 3.6), 1.0) * 100
+  const speedPercent = Math.min(speedKmh / (vehicle.MAX_FORWARD_SPEED * 3.6), 1.0) * 100
   hudSpeedBar.style.width = `${speedPercent}%`
 
-  if (Math.abs(currentSpeed) < 0.2) {
+  if (Math.abs(vehicle.currentSpeed) < 0.2) {
     hudGear.textContent = 'N'
     hudGear.className = 'gear-badge neutral'
-  } else if (currentSpeed > 0) {
+  } else if (vehicle.currentSpeed > 0) {
     hudGear.textContent = 'D'
     hudGear.className = 'gear-badge'
   } else {
@@ -650,7 +289,7 @@ function animate() {
     hudGear.className = 'gear-badge reverse'
   }
 
-  // Render Scene
+  // 10.5 Render Scene
   renderer.render(scene, camera)
 }
 
