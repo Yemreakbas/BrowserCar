@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { PhysicsWorld } from '../physics/PhysicsWorld.ts'
+import { DEFAULT_VEHICLE_CONFIG, type VehicleConfig } from './VehicleConfig.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 
 export interface VehicleInput {
@@ -16,6 +17,9 @@ export class Vehicle {
   public bodyGroup: THREE.Group
   public isLoaded: boolean = false
   public loadError: string | null = null
+
+  // Centralized Vehicle Tuning Configuration
+  public config: VehicleConfig
 
   // Rapier Physics references
   public rigidBody!: RAPIER.RigidBody
@@ -37,22 +41,17 @@ export class Vehicle {
   public currentSpeed: number = 0
   public currentSteerAngle: number = 0
   private wheelSpinAngle: number = 0
+  private currentTraction: number = 0.94
 
-  // Vehicle Tuning
-  public readonly MAX_FORWARD_SPEED: number = 28.0 // ~101 km/h
-  public readonly MAX_REVERSE_SPEED: number = -11.0 // ~40 km/h
-  public readonly ACCELERATION: number = 18.0
-  public readonly REVERSE_ACCEL: number = 10.0
-  public readonly BRAKING_POWER: number = 28.0
-  public readonly HANDBRAKE_POWER: number = 42.0
-  public readonly DRAG: number = 4.5
-  public readonly MAX_STEER_ANGLE: number = 0.50 // radians (~28.6 degrees)
-  public readonly STEER_SPEED: number = 5.5
-  public readonly TURN_RATE: number = 2.0
-  public readonly WHEEL_RADIUS: number = 0.435 // Kenney wheel radius at 1.45 scale
-
-  constructor(scene: THREE.Scene, physicsWorld: PhysicsWorld, onLoaded?: () => void) {
+  constructor(
+    scene: THREE.Scene,
+    physicsWorld: PhysicsWorld,
+    customConfig?: Partial<VehicleConfig>,
+    onLoaded?: () => void
+  ) {
     this.physicsWorld = physicsWorld
+    this.config = { ...DEFAULT_VEHICLE_CONFIG, ...customConfig }
+
     this.root = new THREE.Group()
     this.root.name = 'PlayerVehicleRoot'
     this.root.position.set(0, 0, 0)
@@ -77,11 +76,11 @@ export class Vehicle {
     const rapier = PhysicsWorld.RAPIER_INSTANCE
 
     // Dynamic rigid body positioned at car center of mass (y = 0.45)
-    // lockRotations(true, false, true) locks Pitch (X) and Roll (Z) on the physics body
-    // This gives complete stability (car never flips onto roof on collision) while Yaw (Y) turns freely
+    // enabledRotations(false, true, false) locks Pitch (X) and Roll (Z) on the physics body
+    // This gives rock-solid stability while Yaw (Y) turns and drifts freely
     const bodyDesc = rapier.RigidBodyDesc.dynamic()
       .setTranslation(0, 0.45, 0)
-      .setLinearDamping(0.6)
+      .setLinearDamping(0.55)
       .enabledRotations(false, true, false)
 
     this.rigidBody = this.physicsWorld.world.createRigidBody(bodyDesc)
@@ -196,7 +195,7 @@ export class Vehicle {
     this.root.position.set(trans.x, trans.y - 0.43, trans.z)
     this.root.quaternion.set(rot.x, rot.y, rot.z, rot.w)
 
-    // 2. Compute Direction Vectors
+    // 2. Compute Forward and Right vectors from car heading
     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.root.quaternion)
     const right = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.root.quaternion)
 
@@ -206,68 +205,110 @@ export class Vehicle {
     const lateralSpeed = linvel.x * right.x + linvel.z * right.z
     this.currentSpeed = forwardSpeed
 
-    // 4. Lateral Grip (Cancels sideways sliding so vehicle tracks its wheels cleanly)
-    const gripDamping = Math.min(delta * 22.0, 0.94)
-    let newLinvelX = linvel.x - right.x * lateralSpeed * gripDamping
-    let newLinvelZ = linvel.z - right.z * lateralSpeed * gripDamping
+    // 4. Configurable Traction & Dynamic Drift Dynamics
+    // Under handbrake, lateral grip drops to allow controllable power-slides
+    const targetTraction = keys.handbrake
+      ? this.config.lateralGripDrift
+      : this.config.lateralGripNormal
 
-    // 5. Longitudinal Acceleration, Braking & Friction
+    const gripLerpRate = keys.handbrake ? 12.0 : this.config.driftGripRecoverySpeed
+    this.currentTraction = THREE.MathUtils.lerp(
+      this.currentTraction,
+      targetTraction,
+      1 - Math.exp(-gripLerpRate * delta)
+    )
+
+    const lateralDamping = Math.min(delta * 22.0 * this.currentTraction, 0.94)
+    let newLinvelX = linvel.x - right.x * lateralSpeed * lateralDamping
+    let newLinvelZ = linvel.z - right.z * lateralSpeed * lateralDamping
+
+    // 5. Non-Linear Acceleration Curve & Braking Dynamics
     let impulse = 0
     if (keys.handbrake) {
-      // Handbrake: strong deceleration
-      const brakeImpulse = Math.min(delta * this.HANDBRAKE_POWER, Math.abs(forwardSpeed)) * Math.sign(forwardSpeed)
+      // Handbrake stopping force
+      const brakeImpulse =
+        Math.min(delta * this.config.handbrakePower, Math.abs(forwardSpeed)) *
+        Math.sign(forwardSpeed)
       impulse -= brakeImpulse
     } else if (keys.forward) {
       if (forwardSpeed < 0) {
-        // Braking while in reverse
-        impulse += this.BRAKING_POWER * delta
-      } else if (forwardSpeed < this.MAX_FORWARD_SPEED) {
-        // Accelerating forward
-        impulse += this.ACCELERATION * delta
+        // Foot brake while moving backwards
+        impulse += this.config.brakingPower * delta
+      } else if (forwardSpeed < this.config.maxForwardSpeed) {
+        // Progressive acceleration curve: strong low-end torque tapering smoothly near top speed
+        const speedRatio = Math.min(Math.max(forwardSpeed / this.config.maxForwardSpeed, 0), 1)
+        const torqueFactor =
+          Math.pow(1 - speedRatio, this.config.accelerationCurvePower) * 0.75 + 0.25
+        impulse += this.config.baseAcceleration * torqueFactor * delta
       }
     } else if (keys.backward) {
       if (forwardSpeed > 0.4) {
         // Foot brake while moving forward
-        impulse -= this.BRAKING_POWER * delta
-      } else if (forwardSpeed > this.MAX_REVERSE_SPEED) {
+        impulse -= this.config.brakingPower * delta
+      } else if (forwardSpeed > this.config.maxReverseSpeed) {
         // Reversing
-        impulse -= this.REVERSE_ACCEL * delta
+        impulse -= this.config.reverseAcceleration * delta
       }
     } else {
-      // Coasting drag
-      const dragAmount = Math.min(delta * this.DRAG, Math.abs(forwardSpeed)) * Math.sign(forwardSpeed)
+      // Natural rolling drag & aerodynamic coasting friction
+      const dragAmount =
+        Math.min(delta * this.config.coastingDrag, Math.abs(forwardSpeed)) *
+        Math.sign(forwardSpeed)
       impulse -= dragAmount
     }
 
     newLinvelX += forward.x * impulse
     newLinvelZ += forward.z * impulse
 
-    // Apply updated velocity (preserving Rapier gravity on Y)
+    // Apply updated linear velocity (preserving natural Rapier gravity on Y)
     this.rigidBody.setLinvel({ x: newLinvelX, y: linvel.y, z: newLinvelZ }, true)
 
-    // 6. Steering Interpolation & Yaw Angular Velocity
+    // 6. Speed-Sensitive Steering
+    // At low speeds, full steering angle is available for sharp 90-degree city turns.
+    // At high speeds, sensitivity scales down smoothly to prevent high-speed twitching.
+    const speedRatio = Math.abs(forwardSpeed) / this.config.steeringSpeedDropoff
+    const speedSteerSensitivity = Math.max(
+      1.0 / (1.0 + speedRatio),
+      this.config.minSteerSensitivity
+    )
+    const effectiveMaxSteer = this.config.maxSteerAngle * speedSteerSensitivity
+
     let targetSteer = 0
-    if (keys.left) targetSteer += 1.0  // A / Left -> positive steer angle (steer left)
-    if (keys.right) targetSteer -= 1.0 // D / Right -> negative steer angle (steer right)
+    if (keys.left) targetSteer += 1.0  // A / Left -> turn left
+    if (keys.right) targetSteer -= 1.0 // D / Right -> turn right
+
+    // Dynamic steering response: rapid wheel turn, snappy return to center
+    const steerRate =
+      targetSteer !== 0
+        ? this.config.steerResponseSpeed
+        : this.config.steerReturnSpeed
 
     this.currentSteerAngle = THREE.MathUtils.lerp(
       this.currentSteerAngle,
-      targetSteer * this.MAX_STEER_ANGLE,
-      1 - Math.exp(-this.STEER_SPEED * delta)
+      targetSteer * effectiveMaxSteer,
+      1 - Math.exp(-steerRate * delta)
     )
 
+    // Apply Yaw Angular Velocity
     if (Math.abs(forwardSpeed) > 0.1) {
-      const speedFactor = Math.min(Math.abs(forwardSpeed) / 5.0, 1.0)
+      const speedFactor = Math.min(Math.abs(forwardSpeed) / 4.8, 1.0)
       const directionSign = forwardSpeed >= 0 ? 1 : -1
-      const targetAngVel = this.currentSteerAngle * this.TURN_RATE * speedFactor * directionSign
+      // Mild drift yaw boost when handbrake is engaged
+      const driftMultiplier = keys.handbrake ? 1.25 : 1.0
+      const targetAngVel =
+        this.currentSteerAngle *
+        this.config.baseTurnRate *
+        speedFactor *
+        directionSign *
+        driftMultiplier
       this.rigidBody.setAngvel({ x: 0, y: targetAngVel, z: 0 }, true)
     } else {
       this.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
 
-    // 7. Visual Wheel Steering and Rolling Animations
+    // 7. Wheel Steering & Rolling Animations
     const distanceTravelled = forwardSpeed * delta
-    this.wheelSpinAngle += distanceTravelled / this.WHEEL_RADIUS
+    this.wheelSpinAngle += distanceTravelled / this.config.wheelRadius
 
     if (this.wheelFrontLeft) {
       this.wheelFrontLeft.rotation.y = this.currentSteerAngle
@@ -284,17 +325,44 @@ export class Vehicle {
       this.wheelBackRight.rotation.x = this.wheelSpinAngle
     }
 
-    // 8. Dynamic Suspension Pitch & Roll on Body Mesh
-    const speedRatio = Math.abs(forwardSpeed) / this.MAX_FORWARD_SPEED
-    const targetPitch = (keys.forward ? -0.04 : keys.backward ? 0.05 : 0) * speedRatio
-    const targetRoll = this.currentSteerAngle * 0.07 * speedRatio
+    // 8. Mild Body Roll & Suspension Pitch
+    // G-forces: acceleration creates pitch squat/dive, lateral cornering creates centrifugal roll
+    const accelG = delta > 0 ? (impulse / delta) / 9.81 : 0
+    const targetPitch = THREE.MathUtils.clamp(
+      -accelG * 0.022,
+      -this.config.suspensionPitchMax,
+      this.config.suspensionPitchMax
+    )
+
+    const corneringRatio = (this.currentSteerAngle * forwardSpeed) / this.config.maxForwardSpeed
+    const targetRoll = THREE.MathUtils.clamp(
+      corneringRatio * this.config.suspensionRollMax * 1.6,
+      -this.config.suspensionRollMax,
+      this.config.suspensionRollMax
+    )
 
     if (this.bodyMesh) {
-      this.bodyMesh.rotation.x = THREE.MathUtils.lerp(this.bodyMesh.rotation.x, targetPitch, 0.18)
-      this.bodyMesh.rotation.z = THREE.MathUtils.lerp(this.bodyMesh.rotation.z, targetRoll, 0.18)
+      this.bodyMesh.rotation.x = THREE.MathUtils.lerp(
+        this.bodyMesh.rotation.x,
+        targetPitch,
+        this.config.suspensionSmoothing
+      )
+      this.bodyMesh.rotation.z = THREE.MathUtils.lerp(
+        this.bodyMesh.rotation.z,
+        targetRoll,
+        this.config.suspensionSmoothing
+      )
     } else {
-      this.bodyGroup.rotation.x = THREE.MathUtils.lerp(this.bodyGroup.rotation.x, targetPitch, 0.18)
-      this.bodyGroup.rotation.z = THREE.MathUtils.lerp(this.bodyGroup.rotation.z, targetRoll, 0.18)
+      this.bodyGroup.rotation.x = THREE.MathUtils.lerp(
+        this.bodyGroup.rotation.x,
+        targetPitch,
+        this.config.suspensionSmoothing
+      )
+      this.bodyGroup.rotation.z = THREE.MathUtils.lerp(
+        this.bodyGroup.rotation.z,
+        targetRoll,
+        this.config.suspensionSmoothing
+      )
     }
   }
 
@@ -304,6 +372,7 @@ export class Vehicle {
     this.currentSpeed = 0
     this.currentSteerAngle = 0
     this.wheelSpinAngle = 0
+    this.currentTraction = this.config.lateralGripNormal
 
     // Reset physics body state
     this.rigidBody.setTranslation({ x: spawnX, y: 0.45, z: spawnZ }, true)

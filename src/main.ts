@@ -13,7 +13,7 @@ app.innerHTML = `
       <div class="brand-badge">
         <span class="status-dot"></span>
         <span class="brand-title">BrowserCar 3D</span>
-        <span id="hud-asset-status" class="brand-subtitle">Phase 4 • Rapier Physics</span>
+        <span id="hud-asset-status" class="brand-subtitle">Phase 5 • Vehicle Feel</span>
       </div>
       <div style="display: flex; gap: 10px; align-items: center;">
         <div id="hud-fps-badge" class="brand-badge" style="font-family: monospace; font-size: 13px; font-weight: 700; color: #34d399; letter-spacing: 0.5px; padding: 6px 12px;">
@@ -151,8 +151,8 @@ async function bootstrap() {
   })
 
   // Build Physics Vehicle
-  const vehicle = new Vehicle(scene, physicsWorld, () => {
-    hudAssetStatus.textContent = 'Rapier Physics Car • Active'
+  const vehicle = new Vehicle(scene, physicsWorld, undefined, () => {
+    hudAssetStatus.textContent = 'Vehicle Feel Active • 60 FPS'
     hudAssetStatus.style.color = '#34d399'
   })
 
@@ -291,7 +291,7 @@ async function bootstrap() {
     const speedKmh = vehicle.getSpeedKmh()
     hudSpeed.textContent = speedKmh.toString()
 
-    const speedPercent = Math.min(speedKmh / (vehicle.MAX_FORWARD_SPEED * 3.6), 1.0) * 100
+    const speedPercent = Math.min(speedKmh / (vehicle.config.maxForwardSpeed * 3.6), 1.0) * 100
     hudSpeedBar.style.width = `${speedPercent}%`
 
     if (Math.abs(vehicle.currentSpeed) < 0.2) {
