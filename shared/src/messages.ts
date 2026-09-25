@@ -1,3 +1,5 @@
+import type { OnlineRaceState } from './constants.ts'
+
 export interface PlayerInfo {
   id: string
   name: string
@@ -5,7 +7,9 @@ export interface PlayerInfo {
   connectedAt: number
   ping?: number
   spawnIndex?: number
+  gridIndex?: number
   color?: number
+  isReady?: boolean
 }
 
 export interface RoomInfo {
@@ -18,6 +22,10 @@ export interface RoomInfo {
   players: PlayerInfo[]
   hostId: string
   createdAt: number
+  raceState?: OnlineRaceState
+  raceStartTime?: number
+  totalLaps?: number
+  countdownRemaining?: number
 }
 
 export interface PlayerInitPayload {
@@ -125,4 +133,71 @@ export interface ReconcilePayload {
   serverTick: number
   serverTime: number
   reason?: string
+}
+
+// --- ONLINE RACE PAYLOADS (PHASE 16) ---
+
+export interface RaceRoomUpdatePayload {
+  roomId: string
+  raceState: OnlineRaceState
+  players: PlayerInfo[]
+  countdownRemaining?: number
+  startTime?: number
+  totalLaps?: number
+}
+
+export interface RaceStartCountdownPayload {
+  roomId: string
+  countdownSeconds: number
+  startsAt: number
+}
+
+export interface RaceStartedPayload {
+  roomId: string
+  startedAt: number
+  totalLaps: number
+}
+
+export interface RaceCheckpointPassRequest {
+  roomId: string
+  checkpointIndex: number
+  lap: number
+  timestamp: number
+  position: [number, number, number]
+}
+
+export interface RaceParticipantProgress {
+  playerId: string
+  playerName: string
+  color?: number
+  currentLap: number
+  checkpointIndex: number
+  totalLaps: number
+  rank: number
+  finished: boolean
+  finishTime: number | null
+  bestLapTime: number | null
+  currentLapTime: number
+}
+
+export interface RaceProgressPayload {
+  roomId: string
+  serverTime: number
+  participants: RaceParticipantProgress[]
+}
+
+export interface RaceParticipantResult {
+  rank: number
+  playerId: string
+  playerName: string
+  color?: number
+  totalTime: number
+  bestLapTime: number | null
+  lapTimes: number[]
+  dnf?: boolean
+}
+
+export interface RaceResultsPayload {
+  roomId: string
+  results: RaceParticipantResult[]
 }

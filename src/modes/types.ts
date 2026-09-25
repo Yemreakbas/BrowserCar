@@ -19,8 +19,9 @@ export const MapType = {
 export type MapType = (typeof MapType)[keyof typeof MapType]
 
 import type { TireSmokeSystem } from '../effects/TireSmoke.ts'
-
 import type { RaceResult } from '../race/RaceSystem.ts'
+import type { NetworkManager } from '../networking/NetworkManager.ts'
+import type { RaceParticipantResult } from '../../shared/src/messages.ts'
 
 export interface ModeHUDController {
   setSubtitle(text: string, color?: string): void
@@ -32,6 +33,7 @@ export interface ModeHUDController {
   setRaceCountdown?(text: string | null, color?: string | null): void
   setWrongWayVisible?(visible: boolean): void
   showRaceResults?(result: RaceResult): void
+  showMultiplayerRaceResults?(results: RaceParticipantResult[]): void
   hideRaceResults?(): void
   updateDriftTelemetry(
     scoreText: string,
@@ -54,6 +56,7 @@ export interface ModeContext {
   driftTrack: DriftTrack
   hud: ModeHUDController
   tireSmoke: TireSmokeSystem
+  networkManager?: NetworkManager
 }
 
 export interface IGameMode {

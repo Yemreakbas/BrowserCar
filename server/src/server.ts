@@ -3,6 +3,7 @@ import { Server as SocketIOServer } from 'socket.io'
 import {
   DEFAULT_SERVER_PORT,
   DEFAULT_GLOBAL_ROOM_ID,
+  DEFAULT_RACE_ROOM_ID,
   SERVER_TICK_RATE,
   SERVER_TICK_INTERVAL_MS,
   SOCKET_EVENTS,
@@ -18,9 +19,11 @@ import type {
   PlayerStateMessage,
   RoomSnapshotPayload,
   ReconcilePayload,
+  RaceCheckpointPassRequest,
 } from '../../shared/src/messages.ts'
 import { PlayerManager } from './players/PlayerManager.ts'
 import { RoomManager } from './rooms/RoomManager.ts'
+import { OnlineRaceManager } from './race/OnlineRaceManager.ts'
 
 const PORT = Number(process.env.PORT) || DEFAULT_SERVER_PORT
 const startTime = Date.now()
@@ -82,6 +85,12 @@ const io = new SocketIOServer(httpServer, {
   pingInterval: 10000,
   pingTimeout: 5000,
 })
+
+const onlineRaceManager = new OnlineRaceManager(io)
+const defaultRaceRoom = roomManager.getRoom(DEFAULT_RACE_ROOM_ID)
+if (defaultRaceRoom) {
+  onlineRaceManager.getOrCreateSession(defaultRaceRoom)
+}
 
 function broadcastRoomList() {
   io.emit(SOCKET_EVENTS.ROOM_LIST_RESPONSE, roomManager.getAllRooms())
@@ -219,6 +228,10 @@ io.on('connection', socket => {
         player: { ...currentPlayer, isHost: true },
       }
 
+      if (room.mode === 'RACE') {
+        onlineRaceManager.handlePlayerJoined(room, payload.player)
+      }
+
       socket.emit(SOCKET_EVENTS.ROOM_JOINED, payload)
       if (typeof callback === 'function') callback({ success: true, room })
 
@@ -293,6 +306,10 @@ io.on('connection', socket => {
       }
       socket.to(room.id).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)
 
+      if (room.mode === 'RACE') {
+        onlineRaceManager.handlePlayerJoined(room, assignedPlayer)
+      }
+
       if (typeof callback === 'function') callback({ success: true, room })
 
       broadcastRoomList()
@@ -323,6 +340,10 @@ io.on('connection', socket => {
       const leaveResult = roomManager.leaveRoom(room.id, currentPlayer.id)
 
       console.log(`[Multiplayer] Player ${currentPlayer.id} left room ${room.id}`)
+
+      if (room.mode === 'RACE') {
+        onlineRaceManager.handlePlayerLeft(room, currentPlayer.id)
+      }
 
       socket.emit(SOCKET_EVENTS.ROOM_LEFT, { roomId: room.id, playerId: currentPlayer.id })
 
@@ -372,6 +393,9 @@ io.on('connection', socket => {
 
       const room = roomManager.findRoomByPlayerId(player.id)
       if (room) {
+        if (room.mode === 'RACE') {
+          onlineRaceManager.handlePlayerLeft(room, player.id)
+        }
         const leaveResult = roomManager.leaveRoom(room.id, player.id)
         if (!leaveResult.roomDeleted && leaveResult.room) {
           const payload: PlayerLeftRoomPayload = {
@@ -383,6 +407,52 @@ io.on('connection', socket => {
         }
         broadcastRoomList()
       }
+    }
+  })
+
+  // --- ONLINE RACE LIFECYCLE (PHASE 16) ---
+  socket.on(SOCKET_EVENTS.RACE_READY_TOGGLE, (ready: boolean) => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !currentPlayer.roomId) return
+      const room = roomManager.getRoom(currentPlayer.roomId)
+      if (room && room.mode === 'RACE') {
+        onlineRaceManager.toggleReady(room, currentPlayer.id, !!ready)
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error in race:ready_toggle:', err)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.RACE_CHECKPOINT_PASS, (data: RaceCheckpointPassRequest) => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !currentPlayer.roomId || !data) return
+      const room = roomManager.getRoom(currentPlayer.roomId)
+      if (room && room.mode === 'RACE') {
+        onlineRaceManager.handleCheckpointPass(
+          room,
+          currentPlayer.id,
+          data.checkpointIndex,
+          data.lap,
+          data.position
+        )
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error in race:checkpoint_pass:', err)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.RACE_REMATCH, () => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !currentPlayer.roomId) return
+      const room = roomManager.getRoom(currentPlayer.roomId)
+      if (room && room.mode === 'RACE') {
+        onlineRaceManager.rematch(room)
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error in race:rematch:', err)
     }
   })
 })

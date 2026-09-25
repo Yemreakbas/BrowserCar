@@ -1,4 +1,4 @@
-import { DEFAULT_GLOBAL_ROOM_ID } from '../../../shared/src/constants.ts'
+import { DEFAULT_GLOBAL_ROOM_ID, DEFAULT_RACE_ROOM_ID, OnlineRaceState } from '../../../shared/src/constants.ts'
 import type {
   RoomInfo,
   PlayerInfo,
@@ -17,7 +17,7 @@ export class RoomManager {
   }
 
   /**
-   * Initialize permanent default rooms (e.g. Global City Free Roam)
+   * Initialize permanent default rooms (e.g. Global City Free Roam & Grand Prix Circuit)
    */
   public initDefaultRooms(): void {
     const globalRoom: RoomInfo = {
@@ -33,6 +33,22 @@ export class RoomManager {
     }
     this.rooms.set(DEFAULT_GLOBAL_ROOM_ID, globalRoom)
     this.playerStatesByRoom.set(DEFAULT_GLOBAL_ROOM_ID, new Map())
+
+    const raceRoom: RoomInfo = {
+      id: DEFAULT_RACE_ROOM_ID,
+      name: 'Grand Prix Çevrimiçi Yarış Pisti',
+      mode: 'RACE',
+      map: 'RACE_TRACK',
+      maxPlayers: 8,
+      currentPlayers: 0,
+      players: [],
+      hostId: 'system',
+      createdAt: Date.now(),
+      raceState: OnlineRaceState.LOBBY,
+      totalLaps: 2,
+    }
+    this.rooms.set(DEFAULT_RACE_ROOM_ID, raceRoom)
+    this.playerStatesByRoom.set(DEFAULT_RACE_ROOM_ID, new Map())
   }
 
   /**
@@ -92,8 +108,9 @@ export class RoomManager {
     }
 
     const spawnIndex = room.players.length % 4
-    const isHost = room.players.length === 0 && room.id !== DEFAULT_GLOBAL_ROOM_ID
-    const updatedPlayer: PlayerInfo = { ...player, isHost, spawnIndex }
+    const gridIndex = room.players.length % 8
+    const isHost = room.players.length === 0 && room.id !== DEFAULT_GLOBAL_ROOM_ID && room.id !== DEFAULT_RACE_ROOM_ID
+    const updatedPlayer: PlayerInfo = { ...player, isHost, spawnIndex, gridIndex, isReady: false }
     room.players.push(updatedPlayer)
     room.currentPlayers = room.players.length
 
@@ -128,7 +145,7 @@ export class RoomManager {
     }
 
     if (room.players.length === 0) {
-      if (roomId === DEFAULT_GLOBAL_ROOM_ID) {
+      if (roomId === DEFAULT_GLOBAL_ROOM_ID || roomId === DEFAULT_RACE_ROOM_ID) {
         room.hostId = 'system'
         return { left: true, roomDeleted: false, room }
       }

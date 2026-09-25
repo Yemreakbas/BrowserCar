@@ -13,6 +13,13 @@ import type {
   PlayerStateMessage,
   RoomSnapshotPayload,
   ReconcilePayload,
+  RaceRoomUpdatePayload,
+  RaceStartCountdownPayload,
+  RaceStartedPayload,
+  RaceProgressPayload,
+  RaceParticipantResult,
+  RaceResultsPayload,
+  RaceCheckpointPassRequest,
 } from '../../shared/src/messages.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -51,6 +58,15 @@ export class NetworkManager {
   private playerStateListeners = new Set<(state: PlayerStateMessage) => void>()
   private roomSnapshotListeners = new Set<(snapshot: RoomSnapshotPayload) => void>()
   private reconcileListeners = new Set<(payload: ReconcilePayload) => void>()
+
+  // Race Event Listeners (Phase 16)
+  private raceRoomUpdateListeners = new Set<(payload: RaceRoomUpdatePayload) => void>()
+  private raceCountdownListeners = new Set<(payload: RaceStartCountdownPayload) => void>()
+  private raceStartedListeners = new Set<(payload: RaceStartedPayload) => void>()
+  private raceProgressListeners = new Set<(payload: RaceProgressPayload) => void>()
+  private racePlayerFinishedListeners = new Set<(result: RaceParticipantResult) => void>()
+  private raceResultsListeners = new Set<(payload: RaceResultsPayload) => void>()
+  private raceRematchListeners = new Set<() => void>()
 
   constructor(serverUrl: string = DEFAULT_SERVER_URL) {
     this.serverUrl = serverUrl
@@ -179,6 +195,54 @@ export class NetworkManager {
       console.warn(`[NetworkManager] Server error [${err.code}]:`, err.message)
       for (const listener of this.errorListeners) {
         listener(err)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_ROOM_UPDATE, (payload: RaceRoomUpdatePayload) => {
+      if (this.currentRoom && this.currentRoom.id === payload.roomId) {
+        this.currentRoom.raceState = payload.raceState
+        this.currentRoom.players = payload.players
+        this.currentRoom.countdownRemaining = payload.countdownRemaining
+        this.currentRoom.raceStartTime = payload.startTime
+      }
+      for (const listener of this.raceRoomUpdateListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_START_COUNTDOWN, (payload: RaceStartCountdownPayload) => {
+      for (const listener of this.raceCountdownListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_STARTED, (payload: RaceStartedPayload) => {
+      for (const listener of this.raceStartedListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_PLAYER_PROGRESS, (payload: RaceProgressPayload) => {
+      for (const listener of this.raceProgressListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_PLAYER_FINISHED, (result: RaceParticipantResult) => {
+      for (const listener of this.racePlayerFinishedListeners) {
+        listener(result)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_RESULTS, (payload: RaceResultsPayload) => {
+      for (const listener of this.raceResultsListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.RACE_REMATCH, () => {
+      for (const listener of this.raceRematchListeners) {
+        listener()
       }
     })
 
@@ -431,5 +495,64 @@ export class NetworkManager {
   public onReconcile(callback: (payload: ReconcilePayload) => void): () => void {
     this.reconcileListeners.add(callback)
     return () => this.reconcileListeners.delete(callback)
+  }
+
+  // --- ONLINE RACE METHODS & SUBSCRIPTIONS (PHASE 16) ---
+
+  public sendReadyToggle(ready: boolean): void {
+    if (!this.socket || !this.socket.connected) return
+    this.socket.emit(SOCKET_EVENTS.RACE_READY_TOGGLE, ready)
+  }
+
+  public sendCheckpointPass(checkpointIndex: number, lap: number, position: [number, number, number]): void {
+    if (!this.socket || !this.socket.connected || !this.currentRoom) return
+    const request: RaceCheckpointPassRequest = {
+      roomId: this.currentRoom.id,
+      checkpointIndex,
+      lap,
+      timestamp: Date.now(),
+      position,
+    }
+    this.socket.emit(SOCKET_EVENTS.RACE_CHECKPOINT_PASS, request)
+  }
+
+  public sendRematch(): void {
+    if (!this.socket || !this.socket.connected) return
+    this.socket.emit(SOCKET_EVENTS.RACE_REMATCH)
+  }
+
+  public onRaceRoomUpdate(callback: (payload: RaceRoomUpdatePayload) => void): () => void {
+    this.raceRoomUpdateListeners.add(callback)
+    return () => this.raceRoomUpdateListeners.delete(callback)
+  }
+
+  public onRaceCountdown(callback: (payload: RaceStartCountdownPayload) => void): () => void {
+    this.raceCountdownListeners.add(callback)
+    return () => this.raceCountdownListeners.delete(callback)
+  }
+
+  public onRaceStarted(callback: (payload: RaceStartedPayload) => void): () => void {
+    this.raceStartedListeners.add(callback)
+    return () => this.raceStartedListeners.delete(callback)
+  }
+
+  public onRaceProgress(callback: (payload: RaceProgressPayload) => void): () => void {
+    this.raceProgressListeners.add(callback)
+    return () => this.raceProgressListeners.delete(callback)
+  }
+
+  public onRacePlayerFinished(callback: (result: RaceParticipantResult) => void): () => void {
+    this.racePlayerFinishedListeners.add(callback)
+    return () => this.racePlayerFinishedListeners.delete(callback)
+  }
+
+  public onRaceResults(callback: (payload: RaceResultsPayload) => void): () => void {
+    this.raceResultsListeners.add(callback)
+    return () => this.raceResultsListeners.delete(callback)
+  }
+
+  public onRaceRematch(callback: () => void): () => void {
+    this.raceRematchListeners.add(callback)
+    return () => this.raceRematchListeners.delete(callback)
   }
 }

@@ -9,11 +9,14 @@ import { DriftTrack } from './world/DriftTrack.ts'
 import { GameModeType, type ModeHUDController } from './modes/types.ts'
 import { ModeManager } from './modes/ModeManager.ts'
 import { CityFreeRoamMode } from './modes/CityFreeRoamMode.ts'
+import { RaceMode } from './modes/RaceMode.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
 import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
 import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
+import { OnlineRaceState } from '../shared/src/constants.ts'
+import type { RaceParticipantResult } from '../shared/src/messages.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -79,6 +82,31 @@ app.innerHTML = `
       <div class="player-list-footer">
         <span id="player-list-ping">Gecikme: -- ms</span>
         <span style="color: #64748b;">[R] Sıfırla • [C] Konum</span>
+      </div>
+    </div>
+
+    <!-- Dedicated Online Race Room HUD Card (Phase 16) -->
+    <div id="online-race-card" class="online-race-card" style="display: none;">
+      <div class="online-race-header">
+        <div class="online-race-title-group">
+          <span style="font-size: 14px;">🏁</span>
+          <span id="online-race-room-name" class="online-race-title">YARIŞ ODASI</span>
+        </div>
+        <span id="online-race-status-badge" class="online-race-badge">LOBİ</span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="online-race-grid-badge" class="online-race-grid-badge">Grid #1</span>
+        <span id="online-race-players-count" style="font-size: 11px; color: #94a3b8; font-family: var(--font-mono);">0/8 Sürücü</span>
+      </div>
+
+      <button id="btn-race-ready" class="online-race-btn-ready" type="button">
+        <span id="btn-race-ready-icon">⚪</span>
+        <span id="btn-race-ready-text">HAZIRIM (BOŞLUK)</span>
+      </button>
+
+      <div id="online-race-standings" class="online-race-standings">
+        <!-- Live standings rows injected dynamically -->
       </div>
     </div>
 
@@ -330,7 +358,7 @@ app.innerHTML = `
         <h2 id="race-results-title">YARIŞ TAMAMLANDI!</h2>
         <p id="race-results-subtitle">Grand Prix 3 Tur Mücadelesi</p>
       </div>
-      <div class="results-grid">
+      <div id="race-singleplayer-results" class="results-grid">
         <div class="result-stat-box">
           <span class="stat-label">TOPLAM SÜRE</span>
           <span class="stat-value" id="race-total-time">00:00.0</span>
@@ -342,6 +370,22 @@ app.innerHTML = `
       </div>
       <div class="lap-times-list" id="race-lap-times-list">
         <!-- Injected dynamically -->
+      </div>
+      <!-- Multiplayer Podium Leaderboard Table (Phase 16) -->
+      <div id="race-multiplayer-results-container" style="display: none; width: 100%;">
+        <table class="online-race-results-table">
+          <thead>
+            <tr>
+              <th style="width: 55px;">SIRA</th>
+              <th>SÜRÜCÜ</th>
+              <th>TOPLAM</th>
+              <th>EN İYİ TUR</th>
+            </tr>
+          </thead>
+          <tbody id="race-multiplayer-results-body">
+            <!-- Dynamically injected rows -->
+          </tbody>
+        </table>
       </div>
       <div class="results-actions">
         <button id="btn-race-restart" class="action-btn primary" type="button">Tekrar Yarış (R)</button>
@@ -393,6 +437,20 @@ const raceBestLap = document.querySelector<HTMLSpanElement>('#race-best-lap')!
 const raceLapTimesList = document.querySelector<HTMLDivElement>('#race-lap-times-list')!
 const btnRaceRestart = document.querySelector<HTMLButtonElement>('#btn-race-restart')!
 const btnRaceMenu = document.querySelector<HTMLButtonElement>('#btn-race-menu')!
+const raceSingleplayerResults = document.querySelector<HTMLDivElement>('#race-singleplayer-results')!
+const raceMultiplayerResultsContainer = document.querySelector<HTMLDivElement>('#race-multiplayer-results-container')!
+const raceMultiplayerResultsBody = document.querySelector<HTMLTableSectionElement>('#race-multiplayer-results-body')!
+
+// Online Race HUD Overlay Elements (Phase 16)
+const onlineRaceCard = document.querySelector<HTMLDivElement>('#online-race-card')!
+const onlineRaceRoomName = document.querySelector<HTMLSpanElement>('#online-race-room-name')!
+const onlineRaceStatusBadge = document.querySelector<HTMLSpanElement>('#online-race-status-badge')!
+const onlineRaceGridBadge = document.querySelector<HTMLSpanElement>('#online-race-grid-badge')!
+const onlineRacePlayersCount = document.querySelector<HTMLSpanElement>('#online-race-players-count')!
+const btnRaceReady = document.querySelector<HTMLButtonElement>('#btn-race-ready')!
+const btnRaceReadyIcon = document.querySelector<HTMLSpanElement>('#btn-race-ready-icon')!
+const btnRaceReadyText = document.querySelector<HTMLSpanElement>('#btn-race-ready-text')!
+const onlineRaceStandings = document.querySelector<HTMLDivElement>('#online-race-standings')!
 
 // Multiplayer HUD & Modal Elements (Phase 12)
 const btnMultiplayer = document.querySelector<HTMLButtonElement>('#btn-multiplayer')!
@@ -554,6 +612,10 @@ async function bootstrap() {
       raceWrongWay.style.display = visible ? 'block' : 'none'
     },
     showRaceResults(result: RaceResult) {
+      raceSingleplayerResults.style.display = 'grid'
+      raceLapTimesList.style.display = 'flex'
+      raceMultiplayerResultsContainer.style.display = 'none'
+
       raceResultsTrophy.textContent = result.ratingIcon
       raceResultsTitle.textContent = `${result.rating}!`
       raceResultsSubtitle.textContent = `Grand Prix 3 Tur • Toplam: ${formatTime(result.totalTime)}`
@@ -569,6 +631,49 @@ async function bootstrap() {
           </div>
         `
         )
+        .join('')
+
+      raceResultsModal.classList.add('open')
+    },
+    showMultiplayerRaceResults(results: RaceParticipantResult[]) {
+      raceSingleplayerResults.style.display = 'none'
+      raceLapTimesList.style.display = 'none'
+      raceMultiplayerResultsContainer.style.display = 'block'
+
+      const myId = networkManager.getPlayerId()
+      const myResult = results.find((r) => r.playerId === myId)
+      const myRank = myResult ? myResult.rank : 1
+
+      const trophy = myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '🏁'
+      const title = myRank === 1 ? '1. OLDUN! TEBRİKLER 🏆' : `${myRank}. SIRA TAMAMLANDI!`
+
+      raceResultsTrophy.textContent = trophy
+      raceResultsTitle.textContent = title
+      raceResultsSubtitle.textContent = `Grand Prix Çevrimiçi Yarışı • ${results.length} Pilot Mücadelesi`
+
+      raceMultiplayerResultsBody.innerHTML = results
+        .map((r) => {
+          const isMe = r.playerId === myId
+          const rankIcon = r.rank === 1 ? '🥇 1.' : r.rank === 2 ? '🥈 2.' : r.rank === 3 ? '🥉 3.' : `${r.rank}.`
+          const carColor = r.color ? `#${r.color.toString(16).padStart(6, '0')}` : getPlayerColorHex(r.playerId)
+          const totalStr = r.dnf ? '<span style="color: #ef4444; font-weight: 700;">DNF</span>' : formatTime(r.totalTime)
+          const bestStr = r.bestLapTime !== null ? formatTime(r.bestLapTime) : '--:--.--'
+
+          return `
+          <tr class="${isMe ? 'is-me' : ''}">
+            <td style="font-weight: 800; color: #fbbf24;">${rankIcon}</td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${carColor};"></span>
+                <span style="font-weight: 700;">${r.playerName}</span>
+                ${isMe ? '<span class="mp-you-badge" style="font-size: 9px; padding: 1px 4px;">SEN</span>' : ''}
+              </div>
+            </td>
+            <td style="font-weight: 700;">${totalStr}</td>
+            <td style="color: #38bdf8;">${bestStr}</td>
+          </tr>
+        `
+        })
         .join('')
 
       raceResultsModal.classList.add('open')
@@ -598,7 +703,11 @@ async function bootstrap() {
     },
   }
 
-  // 7. Initialize Mode Manager (Default: City Free Roam)
+  // 7. Initialize Multiplayer Network Manager
+  const networkManager = new NetworkManager()
+  const remotePlayerManager = new RemotePlayerManager(scene, networkManager)
+
+  // 8. Initialize Mode Manager (Default: City Free Roam)
   const modeManager = new ModeManager({
     scene,
     physicsWorld,
@@ -608,6 +717,7 @@ async function bootstrap() {
     driftTrack,
     hud: modeHud,
     tireSmoke,
+    networkManager,
   })
 
   // 6. Mode Selection Modal Management
@@ -670,9 +780,17 @@ async function bootstrap() {
     if (e.target === modeModal) closeModal()
   })
 
-  // Race Results Action Listeners (Phase 11)
+  // Race Results Action Listeners (Phase 11 & 16)
   btnRaceRestart.addEventListener('click', () => {
     raceResultsModal.classList.remove('open')
+    const activeMode = modeManager.getActiveMode()
+    if (activeMode.modeType === GameModeType.RACE) {
+      const currentRoom = networkManager.getCurrentRoom()
+      if (currentRoom && currentRoom.mode === 'RACE') {
+        networkManager.sendRematch()
+        return
+      }
+    }
     modeManager.reset()
   })
 
@@ -682,8 +800,6 @@ async function bootstrap() {
   })
 
   // 8. Multiplayer Manager & Modal Management (Phase 12 & 13)
-  const networkManager = new NetworkManager()
-  const remotePlayerManager = new RemotePlayerManager(scene, networkManager)
   let netSyncAccumulator = 0
   let isMpModalOpen = false
 
@@ -975,6 +1091,139 @@ async function bootstrap() {
     playerListItems.innerHTML = itemsHtml
   }
 
+  // 8.3 Online Race Room Overlay & Standings Controller (Phase 16)
+  btnRaceReady.addEventListener('click', () => {
+    const activeMode = modeManager.getActiveMode()
+    if (activeMode.modeType === GameModeType.RACE) {
+      const raceMode = modeManager.getMode(GameModeType.RACE) as RaceMode
+      if (raceMode) {
+        raceMode.toggleReady(modeManager['context'])
+        updateOnlineRaceCard()
+      }
+    }
+  })
+
+  const updateOnlineRaceCard = () => {
+    const isOnline = networkManager.isConnected()
+    const activeMode = modeManager.getActiveMode()
+    const isRace = activeMode.modeType === GameModeType.RACE
+
+    if (!isOnline || !isRace) {
+      onlineRaceCard.style.display = 'none'
+      return
+    }
+
+    const currentRoom = networkManager.getCurrentRoom()
+    if (!currentRoom || currentRoom.mode !== 'RACE') {
+      onlineRaceCard.style.display = 'none'
+      return
+    }
+
+    onlineRaceCard.style.display = 'flex'
+    onlineRaceRoomName.textContent = currentRoom.name || 'YARIŞ ODASI'
+
+    const raceState = currentRoom.raceState || OnlineRaceState.LOBBY
+    const myId = networkManager.getPlayerId() || ''
+    const myPlayer = currentRoom.players.find((p) => p.id === myId)
+    const isReady = !!myPlayer?.isReady
+    const gridIdx = myPlayer?.gridIndex ?? (currentRoom.players.findIndex((p) => p.id === myId) % 8)
+
+    onlineRaceGridBadge.textContent = `Grid #${gridIdx + 1}`
+    onlineRacePlayersCount.textContent = `${currentRoom.currentPlayers}/${currentRoom.maxPlayers} Sürücü`
+
+    // Status badge & Ready button state
+    if (raceState === OnlineRaceState.LOBBY) {
+      onlineRaceStatusBadge.className = 'online-race-badge'
+      onlineRaceStatusBadge.textContent = 'LOBİ'
+      btnRaceReady.style.display = 'flex'
+      if (isReady) {
+        btnRaceReady.classList.add('is-ready')
+        btnRaceReadyIcon.textContent = '🟢'
+        btnRaceReadyText.textContent = 'HAZIRSIN (İPTAL ET)'
+      } else {
+        btnRaceReady.classList.remove('is-ready')
+        btnRaceReadyIcon.textContent = '⚪'
+        btnRaceReadyText.textContent = 'HAZIRIM (BOŞLUK)'
+      }
+    } else if (raceState === OnlineRaceState.COUNTDOWN) {
+      onlineRaceStatusBadge.className = 'online-race-badge countdown'
+      onlineRaceStatusBadge.textContent = `BAŞLIYOR: ${currentRoom.countdownRemaining || 3}s`
+      btnRaceReady.style.display = 'none'
+    } else if (raceState === OnlineRaceState.RACING) {
+      onlineRaceStatusBadge.className = 'online-race-badge racing'
+      onlineRaceStatusBadge.textContent = 'YARIŞTA'
+      btnRaceReady.style.display = 'none'
+    } else {
+      onlineRaceStatusBadge.className = 'online-race-badge'
+      onlineRaceStatusBadge.textContent = 'BİTTİ'
+      btnRaceReady.style.display = 'none'
+    }
+
+    // Render drivers or standings rows during lobby
+    if (raceState === OnlineRaceState.LOBBY) {
+      const rowsHtml = currentRoom.players
+        .map((p, idx) => {
+          const isMe = p.id === myId
+          const pColor = getPlayerColorHex(p.id)
+          const pGrid = p.gridIndex !== undefined ? p.gridIndex + 1 : idx + 1
+          const readyBadge = p.isReady
+            ? '<span style="color: #34d399; font-weight: 700;">🟢 Hazır</span>'
+            : '<span style="color: #94a3b8; font-weight: 600;">⚪ Bekliyor</span>'
+
+          return `
+            <div class="online-race-standings-row ${isMe ? 'is-me' : ''}">
+              <div class="online-race-row-left">
+                <span class="online-race-rank">#${pGrid}</span>
+                <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: ${pColor};"></span>
+                <span class="online-race-driver-name">${p.name}</span>
+                ${isMe ? '<span class="mp-you-badge" style="font-size: 9px; padding: 1px 4px;">SEN</span>' : ''}
+              </div>
+              <div class="online-race-row-right">
+                ${readyBadge}
+              </div>
+            </div>
+          `
+        })
+        .join('')
+
+      onlineRaceStandings.innerHTML = rowsHtml
+    }
+  }
+
+  networkManager.onRaceRoomUpdate(() => {
+    updateOnlineRaceCard()
+  })
+
+  networkManager.onRaceProgress((payload) => {
+    if (onlineRaceCard.style.display !== 'none' && payload.participants) {
+      const myId = networkManager.getPlayerId() || ''
+      const rowsHtml = payload.participants
+        .map((p) => {
+          const isMe = p.playerId === myId
+          const pColor = getPlayerColorHex(p.playerId)
+          const statusText = p.finished
+            ? '<span style="color: #facc15; font-weight: 700;">🏁 BİTTİ</span>'
+            : `Tur ${p.currentLap}/2`
+
+          return `
+            <div class="online-race-standings-row ${isMe ? 'is-me' : ''}">
+              <div class="online-race-row-left">
+                <span class="online-race-rank">P${p.rank}</span>
+                <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: ${pColor};"></span>
+                <span class="online-race-driver-name">${p.playerName}</span>
+                ${isMe ? '<span class="mp-you-badge" style="font-size: 9px; padding: 1px 4px;">SEN</span>' : ''}
+              </div>
+              <div class="online-race-row-right">
+                <span class="online-race-lap-badge">${statusText}</span>
+              </div>
+            </div>
+          `
+        })
+        .join('')
+      onlineRaceStandings.innerHTML = rowsHtml
+    }
+  })
+
   networkManager.onRoomsUpdated((rooms) => {
     renderRoomsList(rooms)
   })
@@ -993,20 +1242,31 @@ async function bootstrap() {
         doRespawn()
       }
     }
+    // Starting grid assignment for Race Track (Phase 16)
+    if (payload.room.mode === GameModeType.RACE) {
+      const raceMode = modeManager.getMode(GameModeType.RACE) as RaceMode
+      if (raceMode) {
+        raceMode.checkAndInitSession(modeManager['context'])
+      }
+    }
+    updateOnlineRaceCard()
   })
 
   networkManager.onRoomLeft(() => {
     mpRoomView.style.display = 'none'
     mpLobbyView.style.display = 'flex'
     networkManager.refreshRooms()
+    updateOnlineRaceCard()
   })
 
   networkManager.onPlayerJoinedRoom((payload) => {
     renderRoomView(payload.room)
+    updateOnlineRaceCard()
   })
 
   networkManager.onPlayerLeftRoom((payload) => {
     renderRoomView(payload.room)
+    updateOnlineRaceCard()
   })
 
   // Authoritative State Reconciliation (Phase 14)
@@ -1083,9 +1343,23 @@ async function bootstrap() {
         keys.right = true
         keyD.classList.add('active')
         break
-      case 'Space':
+      case 'Space': {
+        const activeMode = modeManager.getActiveMode()
+        if (activeMode.modeType === GameModeType.RACE) {
+          const currentRoom = networkManager.getCurrentRoom()
+          if (currentRoom && currentRoom.mode === 'RACE' && (!currentRoom.raceState || currentRoom.raceState === OnlineRaceState.LOBBY)) {
+            e.preventDefault()
+            const raceMode = modeManager.getMode(GameModeType.RACE) as RaceMode
+            if (raceMode) {
+              raceMode.toggleReady(modeManager['context'])
+              updateOnlineRaceCard()
+            }
+            break
+          }
+        }
         keys.handbrake = true
         break
+      }
       case 'KeyM':
         toggleModal()
         break
@@ -1171,11 +1445,12 @@ async function bootstrap() {
     // 9.4b Remote Players Update & Local Telemetry Sync (Phase 13)
     remotePlayerManager.update(delta)
 
-    // 9.4c Online City Player List Throttle Update (Phase 15)
+    // 9.4c Online City & Race Player List Throttle Update (Phase 15 & 16)
     playerListTimer += delta
     if (playerListTimer >= 0.25) {
       playerListTimer = 0
       updateCityPlayerList()
+      updateOnlineRaceCard()
     }
 
     netSyncAccumulator += delta
