@@ -10,13 +10,14 @@ import { GameModeType, type ModeHUDController } from './modes/types.ts'
 import { ModeManager } from './modes/ModeManager.ts'
 import { CityFreeRoamMode } from './modes/CityFreeRoamMode.ts'
 import { RaceMode } from './modes/RaceMode.ts'
+import { DriftMode } from './modes/DriftMode.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
 import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
 import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
-import { OnlineRaceState } from '../shared/src/constants.ts'
-import type { RaceParticipantResult } from '../shared/src/messages.ts'
+import { OnlineRaceState, OnlineDriftState } from '../shared/src/constants.ts'
+import type { RaceParticipantResult, DriftParticipantProgress } from '../shared/src/messages.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -107,6 +108,31 @@ app.innerHTML = `
 
       <div id="online-race-standings" class="online-race-standings">
         <!-- Live standings rows injected dynamically -->
+      </div>
+    </div>
+
+    <!-- Dedicated Online Drift Room HUD Card (Phase 17) -->
+    <div id="online-drift-card" class="online-race-card" style="display: none;">
+      <div class="online-race-header">
+        <div class="online-race-title-group">
+          <span style="font-size: 14px;">⚡</span>
+          <span id="online-drift-room-name" class="online-race-title">DRIFT ARENASI</span>
+        </div>
+        <span id="online-drift-status-badge" class="online-race-badge online-drift-badge">LOBİ</span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="online-drift-timer-badge" class="online-drift-timer">⏱️ 60s</span>
+        <span id="online-drift-players-count" style="font-size: 11px; color: #94a3b8; font-family: var(--font-mono);">0/16 Pilot</span>
+      </div>
+
+      <button id="btn-drift-ready" class="online-race-btn-ready" type="button">
+        <span id="btn-drift-ready-icon">⚪</span>
+        <span id="btn-drift-ready-text">HAZIRIM (BOŞLUK)</span>
+      </button>
+
+      <div id="online-drift-standings" class="online-race-standings">
+        <!-- Live drift leaderboard injected dynamically -->
       </div>
     </div>
 
@@ -393,6 +419,36 @@ app.innerHTML = `
       </div>
     </div>
   </div>
+
+  <!-- Drift Results Modal (Phase 17) -->
+  <div id="drift-results-modal" class="modal-backdrop">
+    <div class="modal-card race-results-card">
+      <div class="results-header">
+        <span class="results-trophy" id="drift-results-trophy">⚡</span>
+        <h2 id="drift-results-title">DRIFT SEANSI TAMAMLANDI!</h2>
+        <p id="drift-results-subtitle">Çevrimiçi Drift Arenası • 60 Saniye Sıralaması</p>
+      </div>
+      <div id="drift-multiplayer-results-container" style="width: 100%;">
+        <table class="online-race-results-table">
+          <thead>
+            <tr>
+              <th style="width: 55px;">SIRA</th>
+              <th>SÜRÜCÜ</th>
+              <th>TOPLAM SKOR</th>
+              <th>EN İYİ DRIFT</th>
+            </tr>
+          </thead>
+          <tbody id="drift-multiplayer-results-body">
+            <!-- Dynamically injected rows -->
+          </tbody>
+        </table>
+      </div>
+      <div class="results-actions">
+        <button id="btn-drift-restart" class="action-btn primary" type="button">Tekrar Oyna (R)</button>
+        <button id="btn-drift-menu" class="action-btn secondary" type="button">Mod Değiştir (ESC)</button>
+      </div>
+    </div>
+  </div>
 `
 
 // HUD Elements
@@ -451,6 +507,25 @@ const btnRaceReady = document.querySelector<HTMLButtonElement>('#btn-race-ready'
 const btnRaceReadyIcon = document.querySelector<HTMLSpanElement>('#btn-race-ready-icon')!
 const btnRaceReadyText = document.querySelector<HTMLSpanElement>('#btn-race-ready-text')!
 const onlineRaceStandings = document.querySelector<HTMLDivElement>('#online-race-standings')!
+
+// Online Drift HUD Overlay Elements (Phase 17)
+const onlineDriftCard = document.querySelector<HTMLDivElement>('#online-drift-card')!
+const onlineDriftRoomName = document.querySelector<HTMLSpanElement>('#online-drift-room-name')!
+const onlineDriftStatusBadge = document.querySelector<HTMLSpanElement>('#online-drift-status-badge')!
+const onlineDriftTimerBadge = document.querySelector<HTMLSpanElement>('#online-drift-timer-badge')!
+const onlineDriftPlayersCount = document.querySelector<HTMLSpanElement>('#online-drift-players-count')!
+const btnDriftReady = document.querySelector<HTMLButtonElement>('#btn-drift-ready')!
+const btnDriftReadyIcon = document.querySelector<HTMLSpanElement>('#btn-drift-ready-icon')!
+const btnDriftReadyText = document.querySelector<HTMLSpanElement>('#btn-drift-ready-text')!
+const onlineDriftStandings = document.querySelector<HTMLDivElement>('#online-drift-standings')!
+
+const driftResultsModal = document.querySelector<HTMLDivElement>('#drift-results-modal')!
+const driftResultsTrophy = document.querySelector<HTMLSpanElement>('#drift-results-trophy')!
+const driftResultsTitle = document.querySelector<HTMLHeadingElement>('#drift-results-title')!
+const driftResultsSubtitle = document.querySelector<HTMLParagraphElement>('#drift-results-subtitle')!
+const driftMultiplayerResultsBody = document.querySelector<HTMLTableSectionElement>('#drift-multiplayer-results-body')!
+const btnDriftRestart = document.querySelector<HTMLButtonElement>('#btn-drift-restart')!
+const btnDriftMenu = document.querySelector<HTMLButtonElement>('#btn-drift-menu')!
 
 // Multiplayer HUD & Modal Elements (Phase 12)
 const btnMultiplayer = document.querySelector<HTMLButtonElement>('#btn-multiplayer')!
@@ -681,6 +756,90 @@ async function bootstrap() {
     hideRaceResults() {
       raceResultsModal.classList.remove('open')
     },
+    setDriftCountdown(text: string | null, color?: string | null) {
+      if (text) {
+        raceCountdownOverlay.style.display = 'flex'
+        raceCountdownText.textContent = text
+        if (color) raceCountdownText.style.color = color
+      } else {
+        raceCountdownOverlay.style.display = 'none'
+      }
+    },
+    updateDriftLeaderboard(leaderboard: DriftParticipantProgress[], remainingSeconds: number, driftState: OnlineDriftState) {
+      onlineDriftTimerBadge.textContent = `⏱️ ${remainingSeconds}s`
+      if (driftState === OnlineDriftState.ACTIVE) {
+        onlineDriftStatusBadge.className = 'online-race-badge online-drift-badge active'
+        onlineDriftStatusBadge.textContent = 'CANLI SEANS'
+      }
+
+      const myId = networkManager.getPlayerId() || ''
+      const rowsHtml = leaderboard
+        .map((p) => {
+          const isMe = p.playerId === myId
+          const pColor = p.color ? `#${p.color.toString(16).padStart(6, '0')}` : getPlayerColorHex(p.playerId)
+          const isDriftingPill = p.isDrifting ? '<span class="online-drift-combo-pill">🔥 YANLIYOR</span>' : ''
+
+          return `
+            <div class="online-race-standings-row ${isMe ? 'is-me' : ''}">
+              <div class="online-race-row-left">
+                <span class="online-race-rank">#${p.rank}</span>
+                <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: ${pColor};"></span>
+                <span class="online-race-driver-name">${p.playerName}</span>
+                ${isMe ? '<span class="mp-you-badge" style="font-size: 9px; padding: 1px 4px;">SEN</span>' : ''}
+                ${isDriftingPill}
+              </div>
+              <div class="online-race-row-right">
+                <span class="online-drift-score-pill">${p.totalScore.toLocaleString()}</span>
+              </div>
+            </div>
+          `
+        })
+        .join('')
+
+      onlineDriftStandings.innerHTML = rowsHtml
+    },
+    showMultiplayerDriftResults(leaderboard: DriftParticipantProgress[], winner: DriftParticipantProgress | null) {
+      const myId = networkManager.getPlayerId()
+      const myResult = leaderboard.find((p) => p.playerId === myId)
+      const myRank = myResult ? myResult.rank : 1
+
+      const trophy = myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '⚡'
+      const title = myRank === 1 ? 'DRIFT KRALI OLDUN! 👑' : `${myRank}. SIRA TAMAMLANDI!`
+
+      driftResultsTrophy.textContent = trophy
+      driftResultsTitle.textContent = title
+      driftResultsSubtitle.textContent = winner
+        ? `Kazanan: ${winner.playerName} (${winner.totalScore.toLocaleString()} Puan) • ${leaderboard.length} Pilot Yarıştı`
+        : `Çevrimiçi Drift Arenası • ${leaderboard.length} Pilot Mücadelesi`
+
+      driftMultiplayerResultsBody.innerHTML = leaderboard
+        .map((p) => {
+          const isMe = p.playerId === myId
+          const rankIcon = p.rank === 1 ? '🥇 1.' : p.rank === 2 ? '🥈 2.' : p.rank === 3 ? '🥉 3.' : `${p.rank}.`
+          const carColor = p.color ? `#${p.color.toString(16).padStart(6, '0')}` : getPlayerColorHex(p.playerId)
+
+          return `
+            <tr class="${isMe ? 'is-me' : ''}">
+              <td style="font-weight: 800; color: #fbbf24;">${rankIcon}</td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${carColor};"></span>
+                  <span style="font-weight: 700;">${p.playerName}</span>
+                  ${isMe ? '<span class="mp-you-badge" style="font-size: 9px; padding: 1px 4px;">SEN</span>' : ''}
+                </div>
+              </td>
+              <td style="font-weight: 800; color: #fde047;">${p.totalScore.toLocaleString()} Puan</td>
+              <td style="color: #38bdf8;">${p.bestDriftScore.toLocaleString()}</td>
+            </tr>
+          `
+        })
+        .join('')
+
+      driftResultsModal.classList.add('open')
+    },
+    hideDriftResults() {
+      driftResultsModal.classList.remove('open')
+    },
     updateDriftTelemetry(
       scoreText: string,
       comboText: string,
@@ -796,6 +955,25 @@ async function bootstrap() {
 
   btnRaceMenu.addEventListener('click', () => {
     raceResultsModal.classList.remove('open')
+    openModal()
+  })
+
+  // Drift Results Action Listeners (Phase 17)
+  btnDriftRestart.addEventListener('click', () => {
+    driftResultsModal.classList.remove('open')
+    const activeMode = modeManager.getActiveMode()
+    if (activeMode.modeType === GameModeType.DRIFT) {
+      const currentRoom = networkManager.getCurrentRoom()
+      if (currentRoom && currentRoom.mode === 'DRIFT') {
+        networkManager.sendDriftRematch()
+        return
+      }
+    }
+    modeManager.reset()
+  })
+
+  btnDriftMenu.addEventListener('click', () => {
+    driftResultsModal.classList.remove('open')
     openModal()
   })
 
@@ -1224,6 +1402,103 @@ async function bootstrap() {
     }
   })
 
+  // 8.4 Online Drift Room Overlay & Leaderboard Controller (Phase 17)
+  btnDriftReady.addEventListener('click', () => {
+    const activeMode = modeManager.getActiveMode()
+    if (activeMode.modeType === GameModeType.DRIFT) {
+      const driftMode = modeManager.getMode(GameModeType.DRIFT) as DriftMode
+      if (driftMode) {
+        driftMode.toggleReady(modeManager['context'])
+        updateOnlineDriftCard()
+      }
+    }
+  })
+
+  const updateOnlineDriftCard = () => {
+    const isOnline = networkManager.isConnected()
+    const activeMode = modeManager.getActiveMode()
+    const isDrift = activeMode.modeType === GameModeType.DRIFT
+
+    if (!isOnline || !isDrift) {
+      onlineDriftCard.style.display = 'none'
+      return
+    }
+
+    const currentRoom = networkManager.getCurrentRoom()
+    if (!currentRoom || currentRoom.mode !== 'DRIFT') {
+      onlineDriftCard.style.display = 'none'
+      return
+    }
+
+    onlineDriftCard.style.display = 'flex'
+    onlineDriftRoomName.textContent = currentRoom.name || 'DRIFT ARENASI'
+
+    const driftState = currentRoom.driftState || OnlineDriftState.LOBBY
+    const myId = networkManager.getPlayerId() || ''
+    const myPlayer = currentRoom.players.find((p) => p.id === myId)
+    const isReady = !!myPlayer?.isReady
+
+    onlineDriftPlayersCount.textContent = `${currentRoom.currentPlayers}/${currentRoom.maxPlayers} Pilot`
+
+    if (driftState === OnlineDriftState.LOBBY) {
+      onlineDriftStatusBadge.className = 'online-race-badge online-drift-badge'
+      onlineDriftStatusBadge.textContent = 'LOBİ'
+      onlineDriftTimerBadge.textContent = '⏱️ 60s'
+      btnDriftReady.style.display = 'flex'
+      if (isReady) {
+        btnDriftReady.classList.add('is-ready')
+        btnDriftReadyIcon.textContent = '🟢'
+        btnDriftReadyText.textContent = 'HAZIRSIN (İPTAL ET)'
+      } else {
+        btnDriftReady.classList.remove('is-ready')
+        btnDriftReadyIcon.textContent = '⚪'
+        btnDriftReadyText.textContent = 'HAZIRIM (BOŞLUK)'
+      }
+
+      const rowsHtml = currentRoom.players
+        .map((p, idx) => {
+          const isMe = p.id === myId
+          const pColor = getPlayerColorHex(p.id)
+          const readyBadge = p.isReady
+            ? '<span style="color: #34d399; font-weight: 700;">🟢 Hazır</span>'
+            : '<span style="color: #94a3b8; font-weight: 600;">⚪ Bekliyor</span>'
+
+          return `
+            <div class="online-race-standings-row ${isMe ? 'is-me' : ''}">
+              <div class="online-race-row-left">
+                <span class="online-race-rank">#${idx + 1}</span>
+                <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: ${pColor};"></span>
+                <span class="online-race-driver-name">${p.name}</span>
+                ${isMe ? '<span class="mp-you-badge" style="font-size: 9px; padding: 1px 4px;">SEN</span>' : ''}
+              </div>
+              <div class="online-race-row-right">
+                ${readyBadge}
+              </div>
+            </div>
+          `
+        })
+        .join('')
+
+      onlineDriftStandings.innerHTML = rowsHtml
+    } else if (driftState === OnlineDriftState.COUNTDOWN) {
+      onlineDriftStatusBadge.className = 'online-race-badge countdown'
+      onlineDriftStatusBadge.textContent = `BAŞLIYOR: ${currentRoom.countdownRemaining || 3}s`
+      btnDriftReady.style.display = 'none'
+    } else if (driftState === OnlineDriftState.ACTIVE) {
+      onlineDriftStatusBadge.className = 'online-race-badge online-drift-badge active'
+      onlineDriftStatusBadge.textContent = 'CANLI SEANS'
+      btnDriftReady.style.display = 'none'
+    } else {
+      onlineDriftStatusBadge.className = 'online-race-badge'
+      onlineDriftStatusBadge.textContent = 'BİTTİ'
+      btnDriftReady.style.display = 'none'
+    }
+  }
+
+  networkManager.onDriftRoomUpdate(() => {
+    updateOnlineDriftCard()
+  })
+
   networkManager.onRoomsUpdated((rooms) => {
     renderRoomsList(rooms)
   })
@@ -1249,7 +1524,15 @@ async function bootstrap() {
         raceMode.checkAndInitSession(modeManager['context'])
       }
     }
+    // Drift Track session assignment (Phase 17)
+    if (payload.room.mode === GameModeType.DRIFT) {
+      const driftMode = modeManager.getMode(GameModeType.DRIFT) as DriftMode
+      if (driftMode) {
+        driftMode.checkAndInitSession(modeManager['context'])
+      }
+    }
     updateOnlineRaceCard()
+    updateOnlineDriftCard()
   })
 
   networkManager.onRoomLeft(() => {
@@ -1257,15 +1540,19 @@ async function bootstrap() {
     mpLobbyView.style.display = 'flex'
     networkManager.refreshRooms()
     updateOnlineRaceCard()
+    updateOnlineDriftCard()
   })
 
   networkManager.onPlayerJoinedRoom((payload) => {
     renderRoomView(payload.room)
     updateOnlineRaceCard()
+    updateOnlineDriftCard()
   })
 
   networkManager.onPlayerLeftRoom((payload) => {
     renderRoomView(payload.room)
+    updateOnlineRaceCard()
+    updateOnlineDriftCard()
     updateOnlineRaceCard()
   })
 
@@ -1353,6 +1640,17 @@ async function bootstrap() {
             if (raceMode) {
               raceMode.toggleReady(modeManager['context'])
               updateOnlineRaceCard()
+            }
+            break
+          }
+        } else if (activeMode.modeType === GameModeType.DRIFT) {
+          const currentRoom = networkManager.getCurrentRoom()
+          if (currentRoom && currentRoom.mode === 'DRIFT' && (!currentRoom.driftState || currentRoom.driftState === OnlineDriftState.LOBBY)) {
+            e.preventDefault()
+            const driftMode = modeManager.getMode(GameModeType.DRIFT) as DriftMode
+            if (driftMode) {
+              driftMode.toggleReady(modeManager['context'])
+              updateOnlineDriftCard()
             }
             break
           }
@@ -1451,6 +1749,7 @@ async function bootstrap() {
       playerListTimer = 0
       updateCityPlayerList()
       updateOnlineRaceCard()
+      updateOnlineDriftCard()
     }
 
     netSyncAccumulator += delta

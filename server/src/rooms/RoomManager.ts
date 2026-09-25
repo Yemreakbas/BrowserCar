@@ -1,4 +1,4 @@
-import { DEFAULT_GLOBAL_ROOM_ID, DEFAULT_RACE_ROOM_ID, OnlineRaceState } from '../../../shared/src/constants.ts'
+import { DEFAULT_GLOBAL_ROOM_ID, DEFAULT_RACE_ROOM_ID, DEFAULT_DRIFT_ROOM_ID, OnlineRaceState, OnlineDriftState } from '../../../shared/src/constants.ts'
 import type {
   RoomInfo,
   PlayerInfo,
@@ -17,7 +17,7 @@ export class RoomManager {
   }
 
   /**
-   * Initialize permanent default rooms (e.g. Global City Free Roam & Grand Prix Circuit)
+   * Initialize permanent default rooms (Global City, Grand Prix Circuit, Drift Arena)
    */
   public initDefaultRooms(): void {
     const globalRoom: RoomInfo = {
@@ -49,6 +49,22 @@ export class RoomManager {
     }
     this.rooms.set(DEFAULT_RACE_ROOM_ID, raceRoom)
     this.playerStatesByRoom.set(DEFAULT_RACE_ROOM_ID, new Map())
+
+    const driftRoom: RoomInfo = {
+      id: DEFAULT_DRIFT_ROOM_ID,
+      name: 'Drift & Slalom Çevrimiçi Arenası',
+      mode: 'DRIFT',
+      map: 'DRIFT_TRACK',
+      maxPlayers: 16,
+      currentPlayers: 0,
+      players: [],
+      hostId: 'system',
+      createdAt: Date.now(),
+      driftState: OnlineDriftState.LOBBY,
+      driftSessionDuration: 60,
+    }
+    this.rooms.set(DEFAULT_DRIFT_ROOM_ID, driftRoom)
+    this.playerStatesByRoom.set(DEFAULT_DRIFT_ROOM_ID, new Map())
   }
 
   /**
@@ -145,7 +161,7 @@ export class RoomManager {
     }
 
     if (room.players.length === 0) {
-      if (roomId === DEFAULT_GLOBAL_ROOM_ID || roomId === DEFAULT_RACE_ROOM_ID) {
+      if (roomId === DEFAULT_GLOBAL_ROOM_ID || roomId === DEFAULT_RACE_ROOM_ID || roomId === DEFAULT_DRIFT_ROOM_ID) {
         room.hostId = 'system'
         return { left: true, roomDeleted: false, room }
       }

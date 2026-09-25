@@ -1459,6 +1459,47 @@ body {
   background: rgba(30, 41, 59, 0.6);
 }
 
+/* ==========================================================================
+   ONLINE DRIFT HUD & LEADERBOARD (PHASE 17)
+   ========================================================================== */
+.online-drift-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
 
+.online-drift-badge.active {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fde047;
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  animation: pulse-countdown 1s infinite alternate;
+}
 
+.online-drift-timer {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: #fde047;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 2px 7px;
+  border-radius: 5px;
+}
 
+.online-drift-score-pill {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  color: #fde047;
+  font-size: 11px;
+}
+
+.online-drift-combo-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 1px 4px;
+  border-radius: 4px;
+}

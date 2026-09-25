@@ -2,6 +2,7 @@ export const DEFAULT_SERVER_PORT = 3001
 export const DEFAULT_SERVER_URL = `http://localhost:${DEFAULT_SERVER_PORT}`
 export const DEFAULT_GLOBAL_ROOM_ID = 'room_city_global'
 export const DEFAULT_RACE_ROOM_ID = 'room_race_circuit'
+export const DEFAULT_DRIFT_ROOM_ID = 'room_drift_arena'
 
 export const SERVER_TICK_RATE = 20 // 20 Hz = 50ms tick interval
 export const SERVER_TICK_INTERVAL_MS = 1000 / SERVER_TICK_RATE // 50ms
@@ -15,6 +16,14 @@ export const OnlineRaceState = {
   FINISHED: 'FINISHED',
 } as const
 export type OnlineRaceState = (typeof OnlineRaceState)[keyof typeof OnlineRaceState]
+
+export const OnlineDriftState = {
+  LOBBY: 'LOBBY',
+  COUNTDOWN: 'COUNTDOWN',
+  ACTIVE: 'ACTIVE',
+  FINISHED: 'FINISHED',
+} as const
+export type OnlineDriftState = (typeof OnlineDriftState)[keyof typeof OnlineDriftState]
 
 export const SOCKET_EVENTS = {
   // Connection / lifecycle
@@ -51,6 +60,16 @@ export const SOCKET_EVENTS = {
   RACE_PLAYER_FINISHED: 'race:player_finished',
   RACE_RESULTS: 'race:results',
   RACE_REMATCH: 'race:rematch',
+
+  // Online Drift Lifecycle (Phase 17)
+  DRIFT_READY_TOGGLE: 'drift:ready_toggle',
+  DRIFT_ROOM_UPDATE: 'drift:room_update',
+  DRIFT_START_COUNTDOWN: 'drift:start_countdown',
+  DRIFT_STARTED: 'drift:started',
+  DRIFT_SCORE_SUBMISSION: 'drift:score_submission',
+  DRIFT_LEADERBOARD_UPDATE: 'drift:leaderboard_update',
+  DRIFT_SESSION_FINISHED: 'drift:session_finished',
+  DRIFT_REMATCH: 'drift:rematch',
 
   // Errors / alerts
   SERVER_ERROR: 'server:error',

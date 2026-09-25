@@ -20,6 +20,12 @@ import type {
   RaceParticipantResult,
   RaceResultsPayload,
   RaceCheckpointPassRequest,
+  DriftRoomUpdatePayload,
+  DriftStartCountdownPayload,
+  DriftStartedPayload,
+  DriftScoreSubmission,
+  DriftLeaderboardPayload,
+  DriftSessionFinishedPayload,
 } from '../../shared/src/messages.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -67,6 +73,14 @@ export class NetworkManager {
   private racePlayerFinishedListeners = new Set<(result: RaceParticipantResult) => void>()
   private raceResultsListeners = new Set<(payload: RaceResultsPayload) => void>()
   private raceRematchListeners = new Set<() => void>()
+
+  // Drift Event Listeners (Phase 17)
+  private driftRoomUpdateListeners = new Set<(payload: DriftRoomUpdatePayload) => void>()
+  private driftCountdownListeners = new Set<(payload: DriftStartCountdownPayload) => void>()
+  private driftStartedListeners = new Set<(payload: DriftStartedPayload) => void>()
+  private driftLeaderboardListeners = new Set<(payload: DriftLeaderboardPayload) => void>()
+  private driftSessionFinishedListeners = new Set<(payload: DriftSessionFinishedPayload) => void>()
+  private driftRematchListeners = new Set<() => void>()
 
   constructor(serverUrl: string = DEFAULT_SERVER_URL) {
     this.serverUrl = serverUrl
@@ -242,6 +256,43 @@ export class NetworkManager {
 
     this.socket.on(SOCKET_EVENTS.RACE_REMATCH, () => {
       for (const listener of this.raceRematchListeners) {
+        listener()
+      }
+    })
+
+    // Drift Socket Event Handlers (Phase 17)
+    this.socket.on(SOCKET_EVENTS.DRIFT_ROOM_UPDATE, (payload: DriftRoomUpdatePayload) => {
+      for (const listener of this.driftRoomUpdateListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.DRIFT_START_COUNTDOWN, (payload: DriftStartCountdownPayload) => {
+      for (const listener of this.driftCountdownListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.DRIFT_STARTED, (payload: DriftStartedPayload) => {
+      for (const listener of this.driftStartedListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.DRIFT_LEADERBOARD_UPDATE, (payload: DriftLeaderboardPayload) => {
+      for (const listener of this.driftLeaderboardListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.DRIFT_SESSION_FINISHED, (payload: DriftSessionFinishedPayload) => {
+      for (const listener of this.driftSessionFinishedListeners) {
+        listener(payload)
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.DRIFT_REMATCH, () => {
+      for (const listener of this.driftRematchListeners) {
         listener()
       }
     })
@@ -554,5 +605,52 @@ export class NetworkManager {
   public onRaceRematch(callback: () => void): () => void {
     this.raceRematchListeners.add(callback)
     return () => this.raceRematchListeners.delete(callback)
+  }
+
+  // --- ONLINE DRIFT METHODS & SUBSCRIPTIONS (PHASE 17) ---
+
+  public sendDriftReadyToggle(): void {
+    if (!this.socket || !this.socket.connected) return
+    this.socket.emit(SOCKET_EVENTS.DRIFT_READY_TOGGLE)
+  }
+
+  public sendDriftScore(data: DriftScoreSubmission): void {
+    if (!this.socket || !this.socket.connected) return
+    this.socket.emit(SOCKET_EVENTS.DRIFT_SCORE_SUBMISSION, data)
+  }
+
+  public sendDriftRematch(): void {
+    if (!this.socket || !this.socket.connected) return
+    this.socket.emit(SOCKET_EVENTS.DRIFT_REMATCH)
+  }
+
+  public onDriftRoomUpdate(callback: (payload: DriftRoomUpdatePayload) => void): () => void {
+    this.driftRoomUpdateListeners.add(callback)
+    return () => this.driftRoomUpdateListeners.delete(callback)
+  }
+
+  public onDriftCountdown(callback: (payload: DriftStartCountdownPayload) => void): () => void {
+    this.driftCountdownListeners.add(callback)
+    return () => this.driftCountdownListeners.delete(callback)
+  }
+
+  public onDriftStarted(callback: (payload: DriftStartedPayload) => void): () => void {
+    this.driftStartedListeners.add(callback)
+    return () => this.driftStartedListeners.delete(callback)
+  }
+
+  public onDriftLeaderboard(callback: (payload: DriftLeaderboardPayload) => void): () => void {
+    this.driftLeaderboardListeners.add(callback)
+    return () => this.driftLeaderboardListeners.delete(callback)
+  }
+
+  public onDriftSessionFinished(callback: (payload: DriftSessionFinishedPayload) => void): () => void {
+    this.driftSessionFinishedListeners.add(callback)
+    return () => this.driftSessionFinishedListeners.delete(callback)
+  }
+
+  public onDriftRematch(callback: () => void): () => void {
+    this.driftRematchListeners.add(callback)
+    return () => this.driftRematchListeners.delete(callback)
   }
 }

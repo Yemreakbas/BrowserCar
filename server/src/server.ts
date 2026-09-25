@@ -4,6 +4,7 @@ import {
   DEFAULT_SERVER_PORT,
   DEFAULT_GLOBAL_ROOM_ID,
   DEFAULT_RACE_ROOM_ID,
+  DEFAULT_DRIFT_ROOM_ID,
   SERVER_TICK_RATE,
   SERVER_TICK_INTERVAL_MS,
   SOCKET_EVENTS,
@@ -20,10 +21,12 @@ import type {
   RoomSnapshotPayload,
   ReconcilePayload,
   RaceCheckpointPassRequest,
+  DriftScoreSubmission,
 } from '../../shared/src/messages.ts'
 import { PlayerManager } from './players/PlayerManager.ts'
 import { RoomManager } from './rooms/RoomManager.ts'
 import { OnlineRaceManager } from './race/OnlineRaceManager.ts'
+import { OnlineDriftManager } from './drift/OnlineDriftManager.ts'
 
 const PORT = Number(process.env.PORT) || DEFAULT_SERVER_PORT
 const startTime = Date.now()
@@ -90,6 +93,12 @@ const onlineRaceManager = new OnlineRaceManager(io)
 const defaultRaceRoom = roomManager.getRoom(DEFAULT_RACE_ROOM_ID)
 if (defaultRaceRoom) {
   onlineRaceManager.getOrCreateSession(defaultRaceRoom)
+}
+
+const onlineDriftManager = new OnlineDriftManager(io)
+const defaultDriftRoom = roomManager.getRoom(DEFAULT_DRIFT_ROOM_ID)
+if (defaultDriftRoom) {
+  onlineDriftManager.getOrCreateSession(defaultDriftRoom)
 }
 
 function broadcastRoomList() {
@@ -230,6 +239,9 @@ io.on('connection', socket => {
 
       if (room.mode === 'RACE') {
         onlineRaceManager.handlePlayerJoined(room, payload.player)
+      } else if (room.mode === 'DRIFT') {
+        onlineDriftManager.getOrCreateSession(room)
+        onlineDriftManager.addPlayer(room.id, payload.player)
       }
 
       socket.emit(SOCKET_EVENTS.ROOM_JOINED, payload)
@@ -308,6 +320,9 @@ io.on('connection', socket => {
 
       if (room.mode === 'RACE') {
         onlineRaceManager.handlePlayerJoined(room, assignedPlayer)
+      } else if (room.mode === 'DRIFT') {
+        onlineDriftManager.getOrCreateSession(room)
+        onlineDriftManager.addPlayer(room.id, assignedPlayer)
       }
 
       if (typeof callback === 'function') callback({ success: true, room })
@@ -343,6 +358,8 @@ io.on('connection', socket => {
 
       if (room.mode === 'RACE') {
         onlineRaceManager.handlePlayerLeft(room, currentPlayer.id)
+      } else if (room.mode === 'DRIFT') {
+        onlineDriftManager.removePlayer(room.id, currentPlayer.id)
       }
 
       socket.emit(SOCKET_EVENTS.ROOM_LEFT, { roomId: room.id, playerId: currentPlayer.id })
@@ -395,6 +412,8 @@ io.on('connection', socket => {
       if (room) {
         if (room.mode === 'RACE') {
           onlineRaceManager.handlePlayerLeft(room, player.id)
+        } else if (room.mode === 'DRIFT') {
+          onlineDriftManager.removePlayer(room.id, player.id)
         }
         const leaveResult = roomManager.leaveRoom(room.id, player.id)
         if (!leaveResult.roomDeleted && leaveResult.room) {
@@ -453,6 +472,46 @@ io.on('connection', socket => {
       }
     } catch (err) {
       console.warn('[Multiplayer] Error in race:rematch:', err)
+    }
+  })
+
+  // --- ONLINE DRIFT LIFECYCLE (PHASE 17) ---
+  socket.on(SOCKET_EVENTS.DRIFT_READY_TOGGLE, () => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !currentPlayer.roomId) return
+      const room = roomManager.getRoom(currentPlayer.roomId)
+      if (room && room.mode === 'DRIFT') {
+        onlineDriftManager.toggleReady(room.id, currentPlayer.id)
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error in drift:ready_toggle:', err)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.DRIFT_SCORE_SUBMISSION, (data: DriftScoreSubmission) => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !currentPlayer.roomId || !data) return
+      const room = roomManager.getRoom(currentPlayer.roomId)
+      if (room && room.mode === 'DRIFT') {
+        onlineDriftManager.processScoreSubmission(currentPlayer.id, data)
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error in drift:score_submission:', err)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.DRIFT_REMATCH, () => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !currentPlayer.roomId) return
+      const room = roomManager.getRoom(currentPlayer.roomId)
+      if (room && room.mode === 'DRIFT') {
+        onlineDriftManager.rematch(room.id)
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error in drift:rematch:', err)
     }
   })
 })

@@ -1,4 +1,4 @@
-import type { OnlineRaceState } from './constants.ts'
+import type { OnlineRaceState, OnlineDriftState } from './constants.ts'
 
 export interface PlayerInfo {
   id: string
@@ -26,6 +26,9 @@ export interface RoomInfo {
   raceStartTime?: number
   totalLaps?: number
   countdownRemaining?: number
+  driftState?: OnlineDriftState
+  driftStartTime?: number
+  driftSessionDuration?: number
 }
 
 export interface PlayerInitPayload {
@@ -200,4 +203,65 @@ export interface RaceParticipantResult {
 export interface RaceResultsPayload {
   roomId: string
   results: RaceParticipantResult[]
+}
+
+// --- ONLINE DRIFT PAYLOADS (PHASE 17) ---
+
+export interface DriftRoomUpdatePayload {
+  roomId: string
+  driftState: OnlineDriftState
+  players: PlayerInfo[]
+  countdownRemaining?: number
+  remainingSeconds?: number
+  sessionDuration?: number
+}
+
+export interface DriftStartCountdownPayload {
+  roomId: string
+  countdownSeconds: number
+  startsAt: number
+}
+
+export interface DriftStartedPayload {
+  roomId: string
+  startedAt: number
+  sessionDuration: number
+}
+
+export interface DriftScoreSubmission {
+  roomId: string
+  slipAngleDeg: number
+  speedKmh: number
+  duration: number
+  pointsDelta: number
+  zoneBonus: number
+  comboMultiplier: number
+  isSpinOut?: boolean
+  banked?: boolean
+  timestamp: number
+}
+
+export interface DriftParticipantProgress {
+  playerId: string
+  playerName: string
+  color?: number
+  totalScore: number
+  currentPoints: number
+  comboMultiplier: number
+  bestDriftScore: number
+  isDrifting: boolean
+  rank: number
+}
+
+export interface DriftLeaderboardPayload {
+  roomId: string
+  driftState: OnlineDriftState
+  remainingSeconds: number
+  leaderboard: DriftParticipantProgress[]
+}
+
+export interface DriftSessionFinishedPayload {
+  roomId: string
+  leaderboard: DriftParticipantProgress[]
+  winner: DriftParticipantProgress | null
 }
