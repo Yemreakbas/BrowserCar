@@ -40,21 +40,21 @@ export interface VehicleConfig {
 }
 
 export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
-  maxForwardSpeed: 29.0, // ~104.4 km/h
-  maxReverseSpeed: -12.5, // ~45.0 km/h
-  baseAcceleration: 22.0, // Responsive initial launch
-  accelerationCurvePower: 0.85, // Smooth torque tapering as top speed is approached
-  reverseAcceleration: 20.0, // Strong, responsive reverse launch
+  maxForwardSpeed: 38.0, // ~136.8 km/h high-speed sports sedan
+  maxReverseSpeed: -14.0, // ~50.4 km/h
+  baseAcceleration: 28.0, // Punchy, responsive sports acceleration
+  accelerationCurvePower: 0.75, // Sustained torque across mid-high speeds
+  reverseAcceleration: 22.0, // Strong, responsive reverse launch
 
-  brakingPower: 30.0, // Strong, predictable foot braking
-  handbrakePower: 3.5, // Balanced slide drag without killing drift momentum
-  coastingDrag: 4.8, // Smooth deceleration when coasting
+  brakingPower: 36.0, // Strong, predictable foot braking
+  handbrakePower: 4.0, // Balanced slide drag without killing drift momentum
+  coastingDrag: 5.5, // Smooth deceleration when coasting
 
   maxSteerAngle: 0.48, // ~27.5 degrees at low speed
-  minSteerSensitivity: 0.42, // Steering becomes tighter and stable at high speeds
-  steeringSpeedDropoff: 14.0, // Transition begins noticeably above ~50 km/h
-  steerResponseSpeed: 6.8, // Responsive wheel turning
-  steerReturnSpeed: 8.5, // Rapid centering
+  minSteerSensitivity: 0.38, // High-speed steering stability
+  steeringSpeedDropoff: 16.0, // Natural gradual steering transition
+  steerResponseSpeed: 7.2, // Responsive wheel turning
+  steerReturnSpeed: 8.8, // Rapid centering
   baseTurnRate: 2.2, // Dynamic yaw response
 
   lateralGripNormal: 0.94, // Solid grip tracking wheels for normal driving

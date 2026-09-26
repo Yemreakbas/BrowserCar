@@ -88,7 +88,7 @@ export class Vehicle {
     // This gives rock-solid stability while Yaw (Y) turns and drifts freely
     const bodyDesc = rapier.RigidBodyDesc.dynamic()
       .setTranslation(0, 0.45, 0)
-      .setLinearDamping(0.55)
+      .setLinearDamping(0.08)
       .enabledRotations(false, true, false)
 
     this.rigidBody = this.physicsWorld.world.createRigidBody(bodyDesc)
@@ -98,7 +98,7 @@ export class Vehicle {
     const halfHeight = 0.38
     const halfLength = 1.75
     const colliderDesc = rapier.ColliderDesc.cuboid(halfWidth, halfHeight, halfLength)
-      .setFriction(0.4)
+      .setFriction(0.05)
       .setRestitution(0.12)
 
     this.collider = this.physicsWorld.world.createCollider(colliderDesc, this.rigidBody)
