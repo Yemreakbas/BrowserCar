@@ -413,14 +413,28 @@ export class RoomManager {
 
   /**
    * Get authoritative snapshot of all active vehicles in a given room.
+   * Automatically prunes disconnected or stale player states older than 8 seconds.
    */
   public getRoomSnapshot(roomId: string, serverTick: number): RoomSnapshotPayload | null {
     const roomStates = this.playerStatesByRoom.get(roomId)
     if (!roomStates || roomStates.size === 0) return null
+
+    const room = this.rooms.get(roomId)
+    const activePlayerIds = new Set(room?.players.map(p => p.id) || [])
+
+    // Clean up stale or orphan states
+    const now = Date.now()
+    for (const [playerId, state] of roomStates.entries()) {
+      if (!activePlayerIds.has(playerId) || now - state.timestamp > 8000) {
+        roomStates.delete(playerId)
+      }
+    }
+
+    if (roomStates.size === 0) return null
     return {
       roomId,
       serverTick,
-      serverTime: Date.now(),
+      serverTime: now,
       states: Array.from(roomStates.values()),
     }
   }

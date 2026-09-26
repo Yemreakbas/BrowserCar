@@ -91,9 +91,11 @@ export class NetworkManager {
   private driftSessionFinishedListeners = new Set<(payload: DriftSessionFinishedPayload) => void>()
   private driftRematchListeners = new Set<() => void>()
 
-  // Reconnection tracking (Phase 18)
+  // Reconnection tracking & Room Recovery (Phase 18 & 27)
   private reconnectAttemptCount: number = 0
   private reconnectListeners = new Set<(attempt: number) => void>()
+  private lastRoomId: string | null = null
+  private roomFallbackListeners = new Set<(payload: { reason: string; message: string }) => void>()
 
   // Leaderboard listeners (Phase 25)
   private leaderboardUpdateListeners = new Set<(payload: LeaderboardAllPayload) => void>()
@@ -123,6 +125,7 @@ export class NetworkManager {
           playerId: profile.id,
           displayName: profile.displayName,
           selectedCarId: profile.selectedCarId,
+          lastRoomId: this.lastRoomId || undefined,
         },
       })
 
@@ -191,15 +194,29 @@ export class NetworkManager {
     })
 
     this.socket.on(SOCKET_EVENTS.ROOM_JOINED, (payload: RoomJoinedPayload) => {
+      if (!payload || !payload.room) return
       this.currentRoom = payload.room
+      this.lastRoomId = payload.room.id
+      if (this.socket) {
+        ;(this.socket.auth as any).lastRoomId = payload.room.id
+      }
       console.log(`[NetworkManager] Joined room: ${payload.room.name} (${payload.room.id})`)
       for (const listener of this.roomJoinedListeners) {
         listener(payload)
       }
     })
 
+    this.socket.on('room:fallback', (payload: { reason: string; message: string }) => {
+      console.warn(`[NetworkManager] Room fallback (${payload?.reason}):`, payload?.message)
+      if (payload) {
+        for (const listener of this.roomFallbackListeners) {
+          listener(payload)
+        }
+      }
+    })
+
     this.socket.on(SOCKET_EVENTS.ROOM_LEFT, (payload: { roomId: string; playerId: string }) => {
-      if (this.currentRoom && this.currentRoom.id === payload.roomId) {
+      if (this.currentRoom && this.currentRoom.id === payload?.roomId) {
         this.currentRoom = null
       }
       for (const listener of this.roomLeftListeners) {
@@ -208,6 +225,7 @@ export class NetworkManager {
     })
 
     this.socket.on(SOCKET_EVENTS.PLAYER_JOINED_ROOM, (payload: PlayerJoinedRoomPayload) => {
+      if (!payload || !payload.room) return
       if (this.currentRoom && this.currentRoom.id === payload.roomId) {
         this.currentRoom = payload.room
       }
@@ -217,6 +235,7 @@ export class NetworkManager {
     })
 
     this.socket.on(SOCKET_EVENTS.PLAYER_LEFT_ROOM, (payload: PlayerLeftRoomPayload) => {
+      if (!payload || !payload.room) return
       if (this.currentRoom && this.currentRoom.id === payload.roomId) {
         this.currentRoom = payload.room
       }
@@ -226,18 +245,21 @@ export class NetworkManager {
     })
 
     this.socket.on(SOCKET_EVENTS.PLAYER_STATE, (state: PlayerStateMessage) => {
+      if (!state || !state.playerId || !Array.isArray(state.position)) return
       for (const listener of this.playerStateListeners) {
         listener(state)
       }
     })
 
     this.socket.on(SOCKET_EVENTS.ROOM_SNAPSHOT, (snapshot: RoomSnapshotPayload) => {
+      if (!snapshot || !Array.isArray(snapshot.states)) return
       for (const listener of this.roomSnapshotListeners) {
         listener(snapshot)
       }
     })
 
     this.socket.on(SOCKET_EVENTS.SERVER_RECONCILE, (payload: ReconcilePayload) => {
+      if (!payload) return
       this.pendingStates = this.pendingStates.filter(s => s.sequence > payload.lastProcessedSequence)
       for (const listener of this.reconcileListeners) {
         listener(payload)
@@ -245,9 +267,11 @@ export class NetworkManager {
     })
 
     this.socket.on(SOCKET_EVENTS.SERVER_ERROR, (err: ServerErrorPayload) => {
-      console.warn(`[NetworkManager] Server error [${err.code}]:`, err.message)
-      for (const listener of this.errorListeners) {
-        listener(err)
+      console.warn(`[NetworkManager] Server error [${err?.code}]:`, err?.message)
+      if (err) {
+        for (const listener of this.errorListeners) {
+          listener(err)
+        }
       }
     })
 
@@ -627,6 +651,15 @@ export class NetworkManager {
   public onReconnectAttempt(callback: (attempt: number) => void): () => void {
     this.reconnectListeners.add(callback)
     return () => this.reconnectListeners.delete(callback)
+  }
+
+  public onRoomFallback(callback: (payload: { reason: string; message: string }) => void): () => void {
+    this.roomFallbackListeners.add(callback)
+    return () => this.roomFallbackListeners.delete(callback)
+  }
+
+  public getLastRoomId(): string | null {
+    return this.lastRoomId
   }
 
   // Subscriptions

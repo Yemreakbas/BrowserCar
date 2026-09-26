@@ -159,7 +159,11 @@ setInterval(() => {
 
 // 4. Socket.IO Connection & Event Handlers
 io.on('connection', socket => {
-  const auth = (socket.handshake.auth || {}) as { playerId?: string; displayName?: string }
+  const auth = (socket.handshake.auth || {}) as {
+    playerId?: string
+    displayName?: string
+    lastRoomId?: string
+  }
   const preferredPlayerId = typeof auth.playerId === 'string' && auth.playerId.trim() ? auth.playerId.trim() : undefined
   const preferredName = typeof auth.displayName === 'string' && auth.displayName.trim() ? auth.displayName.trim() : undefined
   const player = playerManager.registerPlayer(socket.id, preferredName, preferredPlayerId)
@@ -173,31 +177,62 @@ io.on('connection', socket => {
   socket.emit(SOCKET_EVENTS.PLAYER_INIT, initPayload)
   socket.emit(SOCKET_EVENTS.ROOM_LIST_RESPONSE, roomManager.getAllRooms())
 
-  // Auto-join default global city room
-  const defaultJoin = roomManager.joinRoom(DEFAULT_GLOBAL_ROOM_ID, player)
-  if (defaultJoin.success && defaultJoin.room) {
-    playerManager.setPlayerRoom(socket.id, DEFAULT_GLOBAL_ROOM_ID)
-    socket.join(DEFAULT_GLOBAL_ROOM_ID)
+  // Intelligent Reconnect / Room Recovery (Phase 27)
+  let targetRoomId = DEFAULT_GLOBAL_ROOM_ID
+  let fallbackReason: { reason: string; message: string } | null = null
 
-    const assignedPlayer = defaultJoin.player || player
+  if (auth.lastRoomId && auth.lastRoomId !== DEFAULT_GLOBAL_ROOM_ID) {
+    const existing = roomManager.getRoom(auth.lastRoomId)
+    if (!existing) {
+      fallbackReason = {
+        reason: 'ROOM_LOST',
+        message: 'Önceki oda kapandığı veya bulunamadığı için Genel Şehir Odasına aktarıldınız.',
+      }
+    } else if (existing.currentPlayers >= existing.maxPlayers && !existing.players.some(p => p.id === player.id)) {
+      fallbackReason = {
+        reason: 'ROOM_FULL',
+        message: 'Önceki oda dolduğu için Genel Şehir Odasına aktarıldınız.',
+      }
+    } else {
+      targetRoomId = auth.lastRoomId
+    }
+  }
+
+  const joinResult = roomManager.joinRoom(targetRoomId, player)
+  if (joinResult.success && joinResult.room) {
+    playerManager.setPlayerRoom(socket.id, targetRoomId)
+    socket.join(targetRoomId)
+
+    const assignedPlayer = joinResult.player || player
     const roomJoinedPayload: RoomJoinedPayload = {
-      room: defaultJoin.room,
+      room: joinResult.room,
       player: assignedPlayer,
     }
     socket.emit(SOCKET_EVENTS.ROOM_JOINED, roomJoinedPayload)
 
     // Send initial snapshot of room to new player
-    const snapshot = roomManager.getRoomSnapshot(DEFAULT_GLOBAL_ROOM_ID, currentServerTick)
+    const snapshot = roomManager.getRoomSnapshot(targetRoomId, currentServerTick)
     if (snapshot) {
       socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot)
     }
 
     const playerJoinedPayload: PlayerJoinedRoomPayload = {
-      roomId: DEFAULT_GLOBAL_ROOM_ID,
+      roomId: targetRoomId,
       player: assignedPlayer,
-      room: defaultJoin.room,
+      room: joinResult.room,
     }
-    socket.to(DEFAULT_GLOBAL_ROOM_ID).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)
+    socket.to(targetRoomId).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)
+
+    if (fallbackReason) {
+      socket.emit('room:fallback', fallbackReason)
+    }
+
+    if (joinResult.room.mode === 'RACE') {
+      onlineRaceManager.handlePlayerJoined(joinResult.room, assignedPlayer)
+    } else if (joinResult.room.mode === 'DRIFT') {
+      onlineDriftManager.getOrCreateSession(joinResult.room)
+      onlineDriftManager.addPlayer(joinResult.room.id, assignedPlayer)
+    }
   }
 
   // --- PLAYER: STATE UPDATE & AUTHORITATIVE VALIDATION (PHASE 14) ---
@@ -414,14 +449,29 @@ io.on('connection', socket => {
         }
       }
 
-      const identifier = data.roomCode || data.roomId || ''
+      const identifier = data?.roomCode || data?.roomId || ''
+      if (!identifier) {
+        socket.emit(SOCKET_EVENTS.SERVER_ERROR, {
+          code: 'MALFORMED_MESSAGE',
+          message: 'Geçersiz oda kimliği veya kodu.',
+        })
+        if (typeof callback === 'function') callback({ success: false, error: 'Geçersiz oda kimliği' })
+        return
+      }
+
       const joinResult = roomManager.joinRoom(identifier, currentPlayer)
       if (!joinResult.success || !joinResult.room) {
-        socket.emit(SOCKET_EVENTS.SERVER_ERROR, {
-          code: 'JOIN_ROOM_FAILED',
-          message: joinResult.error || 'Odaya katılınamadı',
-        })
-        if (typeof callback === 'function') callback({ success: false, error: joinResult.error })
+        const isFull = joinResult.error === 'Oda dolu'
+        const isNotFound = joinResult.error === 'Oda bulunamadı'
+        const code = isFull ? 'ROOM_FULL' : isNotFound ? 'ROOM_NOT_FOUND' : 'JOIN_ROOM_FAILED'
+        const message = isFull
+          ? 'Oda dolu (Maksimum oyuncu sınırına ulaşıldı).'
+          : isNotFound
+          ? 'Oda bulunamadı veya kapatılmış.'
+          : joinResult.error || 'Odaya katılınamadı'
+
+        socket.emit(SOCKET_EVENTS.SERVER_ERROR, { code, message })
+        if (typeof callback === 'function') callback({ success: false, error: message })
         return
       }
 
@@ -499,11 +549,14 @@ io.on('connection', socket => {
 
       const joinResult = roomManager.joinRoom(roomToJoin.id, currentPlayer)
       if (!joinResult.success || !joinResult.room) {
-        socket.emit(SOCKET_EVENTS.SERVER_ERROR, {
-          code: 'JOIN_ROOM_FAILED',
-          message: joinResult.error || 'Hızlı odaya katılınamadı',
-        })
-        if (typeof callback === 'function') callback({ success: false, error: joinResult.error })
+        const isFull = joinResult.error === 'Oda dolu'
+        const code = isFull ? 'ROOM_FULL' : 'JOIN_ROOM_FAILED'
+        const message = isFull
+          ? 'Uygun odaların tamamı dolu. Lütfen yeni bir oda oluşturun.'
+          : joinResult.error || 'Hızlı odaya katılınamadı'
+
+        socket.emit(SOCKET_EVENTS.SERVER_ERROR, { code, message })
+        if (typeof callback === 'function') callback({ success: false, error: message })
         return
       }
 

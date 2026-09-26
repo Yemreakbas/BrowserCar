@@ -2239,7 +2239,9 @@ async function bootstrap() {
       .join('')
   }
 
-  // NetworkManager event bindings & Reconnect Tracking (Phase 18)
+  // NetworkManager event bindings & Robust Error / Reconnect Handling (Phase 18 & 27)
+  let previousNetworkStatus: string = 'disconnected'
+
   networkManager.onReconnectAttempt((attempt) => {
     hudNetDot.className = 'status-dot reconnecting'
     hudNetText.textContent = `Yeniden deneniyor (${attempt}/10)...`
@@ -2247,6 +2249,17 @@ async function bootstrap() {
     mpStatusTitle.textContent = `Sunucuya Yeniden Bağlanılıyor (Deneme ${attempt}/10)...`
     mpStatusSub.textContent = 'WebSocket bağlantısı bekleniyor...'
     btnMpReconnect.style.display = 'none'
+    showResetToast(`Sunucuya yeniden bağlanılıyor (${attempt}/10)...`, 'warning', 1800)
+  })
+
+  networkManager.onRoomFallback((payload) => {
+    showResetToast(payload.message, 'warning', 4500)
+    console.warn(`[Multiplayer] Room fallback: ${payload.reason} - ${payload.message}`)
+  })
+
+  networkManager.onError((err) => {
+    showResetToast(`Çevrimiçi Hata: ${err.message}`, 'alert', 3500)
+    console.warn(`[Multiplayer] Server error:`, err)
   })
 
   networkManager.onStatusChange((status, playerId) => {
@@ -2265,6 +2278,10 @@ async function bootstrap() {
       mpPingBadge.style.display = 'flex'
       mpPingText.textContent = `${networkManager.getPing()} ms`
       btnMpReconnect.style.display = 'none'
+
+      if (previousNetworkStatus === 'disconnected' || previousNetworkStatus === 'error') {
+        showResetToast('Çok oyunculu sunucuya bağlandı! 🌐', 'info', 2400)
+      }
 
       if (!mpNameInput.value) {
         mpNameInput.value = playerProfileManager.getProfile().displayName || `Racer_${playerId.slice(-4)}`
@@ -2286,7 +2303,13 @@ async function bootstrap() {
       mpPlayerIdBadge.style.display = 'none'
       mpPingBadge.style.display = 'none'
       btnMpReconnect.style.display = 'inline-block'
+
+      if (previousNetworkStatus === 'connected') {
+        showResetToast('Sunucu bağlantısı koptu. Çevrimdışı moda geçildi.', 'warning', 3500)
+      }
     }
+
+    previousNetworkStatus = status
   })
 
   // 8.1 Mode-Aware Vehicle Respawn & Fall Recovery (Phase 19 & 20)
