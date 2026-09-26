@@ -68,11 +68,24 @@ export class RoomManager {
   }
 
   /**
+   * Generate an uppercase 4-character room code (e.g. A7X9)
+   */
+  private generateRoomCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let code = ''
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return code
+  }
+
+  /**
    * Create a new multiplayer room.
    */
   public createRoom(hostPlayer: PlayerInfo, options: CreateRoomRequest): RoomInfo {
     const roomId = `room_${Math.random().toString(36).substring(2, 8)}`
-    const roomName = (options.name && options.name.trim()) || `Oda #${roomId.slice(-4).toUpperCase()}`
+    const roomCode = (options.roomCode && options.roomCode.trim().toUpperCase()) || this.generateRoomCode()
+    const roomName = (options.name && options.name.trim()) || `Oda #${roomCode}`
 
     const room: RoomInfo = {
       id: roomId,
@@ -84,6 +97,8 @@ export class RoomManager {
       players: [{ ...hostPlayer, isHost: true }],
       hostId: hostPlayer.id,
       createdAt: Date.now(),
+      roomCode,
+      isPrivate: !!options.isPrivate,
     }
 
     this.rooms.set(roomId, room)
@@ -95,8 +110,56 @@ export class RoomManager {
     return this.rooms.get(roomId)
   }
 
+  public findRoomByCodeOrId(identifier: string): RoomInfo | undefined {
+    const clean = identifier.trim()
+    const byId = this.rooms.get(clean)
+    if (byId) return byId
+
+    const upper = clean.toUpperCase()
+    for (const room of this.rooms.values()) {
+      if (room.roomCode && room.roomCode.toUpperCase() === upper) {
+        return room
+      }
+    }
+    return undefined
+  }
+
+  public findQuickJoinRoom(preferredMode?: string): RoomInfo {
+    const candidates = Array.from(this.rooms.values()).filter(
+      r => !r.isPrivate && r.currentPlayers < r.maxPlayers
+    )
+
+    if (preferredMode) {
+      const modeMatches = candidates.filter(r => r.mode === preferredMode)
+      if (modeMatches.length > 0) {
+        // Prioritize rooms with other players
+        modeMatches.sort((a, b) => b.currentPlayers - a.currentPlayers)
+        return modeMatches[0]
+      }
+    } else {
+      // General quick join: prioritize rooms with active players
+      const withPlayers = candidates.filter(r => r.currentPlayers > 0)
+      if (withPlayers.length > 0) {
+        withPlayers.sort((a, b) => b.currentPlayers - a.currentPlayers)
+        return withPlayers[0]
+      }
+      if (candidates.length > 0) {
+        return candidates[0]
+      }
+    }
+
+    // Fallback to default rooms
+    if (preferredMode === 'RACE') {
+      return this.rooms.get(DEFAULT_RACE_ROOM_ID)!
+    }
+    if (preferredMode === 'DRIFT') {
+      return this.rooms.get(DEFAULT_DRIFT_ROOM_ID)!
+    }
+    return this.rooms.get(DEFAULT_GLOBAL_ROOM_ID)!
+  }
+
   public getAllRooms(): RoomInfo[] {
-    return Array.from(this.rooms.values())
+    return Array.from(this.rooms.values()).filter(r => !r.isPrivate)
   }
 
   public getRoomCount(): number {
@@ -104,10 +167,10 @@ export class RoomManager {
   }
 
   /**
-   * Join an existing room.
+   * Join an existing room (by roomId or roomCode).
    */
-  public joinRoom(roomId: string, player: PlayerInfo): { success: boolean; error?: string; room?: RoomInfo; player?: PlayerInfo } {
-    const room = this.rooms.get(roomId)
+  public joinRoom(identifier: string, player: PlayerInfo): { success: boolean; error?: string; room?: RoomInfo; player?: PlayerInfo } {
+    const room = this.findRoomByCodeOrId(identifier)
     if (!room) {
       return { success: false, error: 'Oda bulunamadı' }
     }
@@ -116,6 +179,7 @@ export class RoomManager {
       return { success: false, error: 'Oda dolu' }
     }
 
+    const roomId = room.id
     const existingIndex = room.players.findIndex(p => p.id === player.id)
     if (existingIndex !== -1) {
       const merged = { ...room.players[existingIndex], ...player }
@@ -125,7 +189,7 @@ export class RoomManager {
 
     const spawnIndex = room.players.length % 4
     const gridIndex = room.players.length % 8
-    const isHost = room.players.length === 0 && room.id !== DEFAULT_GLOBAL_ROOM_ID && room.id !== DEFAULT_RACE_ROOM_ID
+    const isHost = room.players.length === 0 && room.id !== DEFAULT_GLOBAL_ROOM_ID && room.id !== DEFAULT_RACE_ROOM_ID && room.id !== DEFAULT_DRIFT_ROOM_ID
     const updatedPlayer: PlayerInfo = { ...player, isHost, spawnIndex, gridIndex, isReady: false }
     room.players.push(updatedPlayer)
     room.currentPlayers = room.players.length

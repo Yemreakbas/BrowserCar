@@ -769,9 +769,16 @@ body {
   animation: pulse-glow 1.5s infinite;
 }
 
-#btn-multiplayer .status-dot.disconnected {
+#btn-multiplayer .status-dot.disconnected,
+#btn-multiplayer .status-dot.error {
   background: #ef4444;
   box-shadow: none;
+}
+
+#btn-multiplayer .status-dot.reconnecting {
+  background: #f97316;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.75);
+  animation: pulse-glow 0.8s infinite alternate;
 }
 
 .mp-modal-card {
@@ -1502,4 +1509,193 @@ body {
   background: rgba(245, 158, 11, 0.15);
   padding: 1px 4px;
   border-radius: 4px;
+}
+
+/* ==========================================================================
+   PHASE 18 — LOBBY AND MATCHMAKING UX
+   ========================================================================== */
+.master-menu-card {
+  max-width: 820px;
+  width: 100%;
+}
+
+.mp-master-tabs {
+  display: flex;
+  background: rgba(15, 23, 42, 0.65);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+  gap: 6px;
+}
+
+.mp-master-tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mp-master-tab-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mp-master-tab-btn.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.4);
+}
+
+.mp-quick-match-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.mp-quick-card {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-quick-card-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mp-quick-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mp-code-input {
+  font-family: var(--font-mono);
+  letter-spacing: 3px;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.mp-full-badge {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.mp-open-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.mp-code-pill {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.mp-room-code-display-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px dashed rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.btn-copy-code {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-copy-code:hover {
+  background: rgba(56, 189, 248, 0.35);
+  color: #ffffff;
+}
+
+.btn-copy-code.copied {
+  background: rgba(16, 185, 129, 0.3);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+.mp-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mp-checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
+.action-btn.disabled,
+.action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: rgba(100, 116, 139, 0.25) !important;
+  border-color: rgba(148, 163, 184, 0.15) !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 640px) {
+  .mp-quick-match-grid {
+    grid-template-columns: 1fr;
+  }
 }

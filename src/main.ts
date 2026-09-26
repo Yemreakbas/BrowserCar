@@ -252,9 +252,9 @@ app.innerHTML = `
     </div>
   </div>
 
-  <!-- Multiplayer Lobby Modal (Phase 12) -->
+  <!-- Master Menu & Multiplayer Lobby Modal (Phase 18) -->
   <div id="multiplayer-modal" class="modal-backdrop">
-    <div class="modal-card mp-modal-card">
+    <div class="modal-card master-menu-card">
       <div class="modal-header">
         <div class="modal-title-group">
           <h2>
@@ -263,9 +263,9 @@ app.innerHTML = `
               <line x1="2" y1="12" x2="22" y2="12"></line>
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
-            Çok Oyunculu Lobi (Multiplayer)
+            BrowserCar Menü & Çok Oyunculu Lobi
           </h2>
-          <p>Online sunucuya bağlan, oda oluştur veya mevcut yarış odalarına katıl</p>
+          <p>Oyun modunu seç veya çevrimiçi sunucuda arkadaşlarınla yarış/drift yap</p>
         </div>
         <button id="mp-modal-close" class="modal-close-btn" type="button" title="Kapat (ESC)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -275,91 +275,172 @@ app.innerHTML = `
         </button>
       </div>
 
-      <!-- Network Status Banner -->
-      <div class="mp-status-banner">
-        <div class="mp-status-left">
-          <span id="mp-status-dot" class="status-dot disconnected"></span>
-          <div>
-            <div id="mp-status-title" class="mp-status-title">Sunucuya Bağlanılıyor...</div>
-            <div id="mp-status-sub" class="mp-status-sub">URL: http://localhost:3001</div>
-          </div>
+      <!-- Master Navigation Tabs: PLAY (SOLO) vs ONLINE (MULTIPLAYER) -->
+      <div class="mp-master-tabs">
+        <button id="main-nav-play" class="mp-master-tab-btn" type="button">
+          <span>🎮</span>
+          <span>OYNA (SOLO MODLAR)</span>
+        </button>
+        <button id="main-nav-online" class="mp-master-tab-btn active" type="button">
+          <span>🌐</span>
+          <span>ONLINE (ÇOK OYUNCULU)</span>
+        </button>
+      </div>
+
+      <!-- Solo Modes View -->
+      <div id="mp-play-view" style="display: none;">
+        <div style="font-size: 13px; color: #94a3b8; margin-bottom: 12px; font-weight: 600;">
+          İstediğin oyun modunu seçip tek oyunculu antrenman ve meydan okumaya başla:
         </div>
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <div id="mp-player-id-badge" class="mp-id-badge" style="display: none;">
-            <span>ID:</span>
-            <span id="mp-player-id-text">--</span>
-          </div>
-          <button id="btn-mp-reconnect" class="action-btn secondary" type="button" style="display: none; padding: 6px 12px; font-size: 11px;">Yeniden Bağlan</button>
+        <div id="master-mode-grid" class="mode-grid">
+          <!-- Rendered dynamically -->
         </div>
       </div>
 
-      <!-- Player Name Row -->
-      <div class="mp-name-bar">
-        <span class="mp-name-label">Oyuncu Adı:</span>
-        <input id="mp-name-input" class="mp-input" type="text" placeholder="Racer_1" maxlength="20" style="flex: 1;" />
-      </div>
-
-      <!-- Lobby Views (Switch between Rooms list and Active Room) -->
-      <div id="mp-lobby-view" class="mp-content-section">
-        <div class="mp-tabs">
-          <button id="mp-tab-rooms" class="mp-tab-btn active" type="button">Aktif Odalar</button>
-          <button id="mp-tab-create" class="mp-tab-btn" type="button">+ Yeni Oda Kur</button>
-        </div>
-
-        <!-- Rooms List Tab -->
-        <div id="mp-rooms-tab-content">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">AÇIK ODALAR</span>
-            <button id="btn-refresh-rooms" class="reset-btn" type="button" style="padding: 4px 10px; font-size: 11px;">Yenile</button>
-          </div>
-          <div id="mp-room-list" class="mp-room-list">
-            <!-- Injected dynamically -->
-          </div>
-        </div>
-
-        <!-- Create Room Tab -->
-        <div id="mp-create-tab-content" style="display: none;">
-          <form id="mp-create-form" class="mp-create-form" onsubmit="return false;">
-            <div class="mp-form-group full-width">
-              <label class="mp-form-label" for="mp-room-name">Oda Adı</label>
-              <input id="mp-room-name" class="mp-input" type="text" placeholder="Örn: Hızlı Yarış #1" value="Hızlı Yarış" maxlength="30" />
+      <!-- Online Multiplayer View -->
+      <div id="mp-online-view" style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Network Status Banner -->
+        <div class="mp-status-banner">
+          <div class="mp-status-left">
+            <span id="mp-status-dot" class="status-dot disconnected"></span>
+            <div>
+              <div id="mp-status-title" class="mp-status-title">Sunucuya Bağlanılıyor...</div>
+              <div id="mp-status-sub" class="mp-status-sub">URL: http://localhost:3001</div>
             </div>
-            <div class="mp-form-group">
-              <label class="mp-form-label" for="mp-room-mode">Oyun Modu</label>
-              <select id="mp-room-mode" class="mp-select">
-                <option value="CITY_FREE_ROAM">🏙️ Serbest Şehir (City Free Roam)</option>
-                <option value="RACE">🏁 Yarış Pisti (Race Track)</option>
-                <option value="DRIFT">🔥 Drift Alanı (Drift Track)</option>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div id="mp-player-id-badge" class="mp-id-badge" style="display: none;">
+              <span>ID:</span>
+              <span id="mp-player-id-text">--</span>
+            </div>
+            <div id="mp-ping-badge" class="mp-id-badge" style="display: none; color: #34d399; border-color: rgba(52, 211, 153, 0.3);">
+              <span>⚡</span>
+              <span id="mp-ping-text">-- ms</span>
+            </div>
+            <button id="btn-mp-reconnect" class="action-btn secondary" type="button" style="display: none; padding: 6px 12px; font-size: 11px;">Yeniden Bağlan</button>
+          </div>
+        </div>
+
+        <!-- Player Name Row -->
+        <div class="mp-name-bar">
+          <span class="mp-name-label">Oyuncu Adı:</span>
+          <input id="mp-name-input" class="mp-input" type="text" placeholder="Racer_1" maxlength="20" style="flex: 1;" />
+        </div>
+
+        <!-- Quick Matchmaking & Private Room Code Grid (Phase 18) -->
+        <div class="mp-quick-match-grid">
+          <div class="mp-quick-card">
+            <div class="mp-quick-card-title">
+              <span>⚡</span>
+              <span>HIZLI EŞLEŞME (QUICK JOIN)</span>
+            </div>
+            <div class="mp-quick-row">
+              <select id="mp-quick-mode" class="mp-select" style="flex: 1; padding: 7px 10px; font-size: 12px;">
+                <option value="">Herhangi Bir Mod</option>
+                <option value="CITY_FREE_ROAM">🏙️ Serbest Şehir</option>
+                <option value="RACE">🏁 Yarış Pisti</option>
+                <option value="DRIFT">🔥 Drift Arenası</option>
               </select>
+              <button id="btn-quick-join" class="action-btn primary" type="button" style="padding: 7px 14px; font-size: 12px; white-space: nowrap;">
+                ⚡ Hemen Oyna
+              </button>
             </div>
-            <div class="mp-form-group">
-              <label class="mp-form-label" for="mp-room-max">Maksimum Oyuncu</label>
-              <select id="mp-room-max" class="mp-select">
-                <option value="4">4 Oyuncu</option>
-                <option value="8" selected>8 Oyuncu</option>
-                <option value="16">16 Oyuncu</option>
-              </select>
-            </div>
-            <div class="mp-form-group full-width" style="margin-top: 6px;">
-              <button id="btn-submit-create-room" class="action-btn primary" type="button" style="width: 100%;">Odayı Başlat</button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <!-- Active Room View (Shown when inside a room) -->
-      <div id="mp-room-view" class="mp-active-room-card" style="display: none;">
-        <div class="mp-active-room-header">
-          <div>
-            <div id="mp-active-room-name" style="font-size: 16px; font-weight: 800; color: #f8fafc;">Oda Adı</div>
-            <div id="mp-active-room-sub" style="font-size: 12px; color: #38bdf8; font-weight: 600; margin-top: 2px;">Mod: Serbest Şehir</div>
           </div>
-          <button id="btn-leave-room" class="action-btn secondary" type="button" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #f87171; padding: 6px 14px; font-size: 12px;">Odadan Ayrıl</button>
+          <div class="mp-quick-card">
+            <div class="mp-quick-card-title">
+              <span>🔑</span>
+              <span>ÖZEL ODA KODU (PRIVATE CODE)</span>
+            </div>
+            <div class="mp-quick-row">
+              <input id="mp-room-code-input" class="mp-input mp-code-input" type="text" placeholder="A7X9" maxlength="6" style="flex: 1; padding: 7px 10px; font-size: 12px;" />
+              <button id="btn-join-code" class="action-btn secondary" type="button" style="padding: 7px 14px; font-size: 12px; white-space: nowrap;">
+                Koda Katıl
+              </button>
+            </div>
+          </div>
         </div>
-        <div>
-          <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">ODADAKİ OYUNCULAR (<span id="mp-member-count">1</span>)</div>
-          <div id="mp-member-list" class="mp-member-list">
-            <!-- Members injected dynamically -->
+
+        <!-- Lobby Views (Switch between Rooms list and Active Room) -->
+        <div id="mp-lobby-view" class="mp-content-section">
+          <div class="mp-tabs">
+            <button id="mp-tab-rooms" class="mp-tab-btn active" type="button">
+              <span>Aktif Odalar</span>
+              <span id="mp-rooms-count" class="mp-room-count-badge" style="margin-left: 4px;">0</span>
+            </button>
+            <button id="mp-tab-create" class="mp-tab-btn" type="button">+ Yeni Oda Kur</button>
+          </div>
+
+          <!-- Rooms List Tab -->
+          <div id="mp-rooms-tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">AÇIK VE KATILINABİLİR ODALAR</span>
+              <button id="btn-refresh-rooms" class="reset-btn" type="button" style="padding: 4px 10px; font-size: 11px;">🔄 Yenile</button>
+            </div>
+            <div id="mp-room-list" class="mp-room-list">
+              <!-- Injected dynamically -->
+            </div>
+          </div>
+
+          <!-- Create Room Tab -->
+          <div id="mp-create-tab-content" style="display: none;">
+            <form id="mp-create-form" class="mp-create-form" onsubmit="return false;">
+              <div class="mp-form-group full-width">
+                <label class="mp-form-label" for="mp-room-name">Oda Adı</label>
+                <input id="mp-room-name" class="mp-input" type="text" placeholder="Örn: Hızlı Yarış #1" value="Hızlı Yarış" maxlength="30" />
+              </div>
+              <div class="mp-form-group">
+                <label class="mp-form-label" for="mp-room-mode">Oyun Modu</label>
+                <select id="mp-room-mode" class="mp-select">
+                  <option value="CITY_FREE_ROAM">🏙️ Serbest Şehir (City Free Roam)</option>
+                  <option value="RACE">🏁 Yarış Pisti (Race Track)</option>
+                  <option value="DRIFT">🔥 Drift Alanı (Drift Track)</option>
+                </select>
+              </div>
+              <div class="mp-form-group">
+                <label class="mp-form-label" for="mp-room-max">Maksimum Oyuncu</label>
+                <select id="mp-room-max" class="mp-select">
+                  <option value="4">4 Oyuncu</option>
+                  <option value="8" selected>8 Oyuncu</option>
+                  <option value="16">16 Oyuncu</option>
+                </select>
+              </div>
+              <div class="mp-form-group full-width" style="margin-top: 4px;">
+                <label class="mp-checkbox-label">
+                  <input type="checkbox" id="mp-room-is-private" />
+                  <span>🔒 Gizli Oda (Listede görünmez, sadece 4 haneli kod ile katılınabilir)</span>
+                </label>
+              </div>
+              <div class="mp-form-group full-width" style="margin-top: 8px;">
+                <button id="btn-submit-create-room" class="action-btn primary" type="button" style="width: 100%;">Odayı Başlat</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Active Room View (Shown when inside a room) -->
+        <div id="mp-room-view" class="mp-active-room-card" style="display: none;">
+          <div class="mp-active-room-header">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="mp-active-room-name" style="font-size: 16px; font-weight: 800; color: #f8fafc;">Oda Adı</span>
+                <span id="mp-active-room-privacy-badge" class="mp-code-pill" style="display: none; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);">🔒 GİZLİ</span>
+              </div>
+              <div id="mp-active-room-sub" style="font-size: 12px; color: #38bdf8; font-weight: 600; margin-top: 2px;">Mod: Serbest Şehir</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div class="mp-room-code-display-wrap">
+                <span style="font-size: 11px; color: #94a3b8; font-weight: 700;">ODA KODU:</span>
+                <span id="mp-room-code-display" class="mp-code-pill" style="font-size: 13px; letter-spacing: 1px;">----</span>
+                <button id="btn-copy-code" class="btn-copy-code" type="button" title="Kodu Kopyala">📋 Kopyala</button>
+              </div>
+              <button id="btn-leave-room" class="action-btn secondary" type="button" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #f87171; padding: 6px 14px; font-size: 12px;">Odadan Ayrıl</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">ODADAKİ OYUNCULAR (<span id="mp-member-count">1</span>)</div>
+            <div id="mp-member-list" class="mp-member-list">
+              <!-- Members injected dynamically -->
+            </div>
           </div>
         </div>
       </div>
@@ -558,6 +639,24 @@ const mpActiveRoomSub = document.querySelector<HTMLDivElement>('#mp-active-room-
 const btnLeaveRoom = document.querySelector<HTMLButtonElement>('#btn-leave-room')!
 const mpMemberCount = document.querySelector<HTMLSpanElement>('#mp-member-count')!
 const mpMemberList = document.querySelector<HTMLDivElement>('#mp-member-list')!
+
+// Phase 18 Lobby & Matchmaking Elements
+const mainNavPlay = document.querySelector<HTMLButtonElement>('#main-nav-play')!
+const mainNavOnline = document.querySelector<HTMLButtonElement>('#main-nav-online')!
+const mpPlayView = document.querySelector<HTMLDivElement>('#mp-play-view')!
+const masterModeGrid = document.querySelector<HTMLDivElement>('#master-mode-grid')!
+const mpOnlineView = document.querySelector<HTMLDivElement>('#mp-online-view')!
+const mpPingBadge = document.querySelector<HTMLDivElement>('#mp-ping-badge')!
+const mpPingText = document.querySelector<HTMLSpanElement>('#mp-ping-text')!
+const mpQuickMode = document.querySelector<HTMLSelectElement>('#mp-quick-mode')!
+const btnQuickJoin = document.querySelector<HTMLButtonElement>('#btn-quick-join')!
+const mpRoomCodeInput = document.querySelector<HTMLInputElement>('#mp-room-code-input')!
+const btnJoinCode = document.querySelector<HTMLButtonElement>('#btn-join-code')!
+const mpRoomsCount = document.querySelector<HTMLSpanElement>('#mp-rooms-count')!
+const mpRoomIsPrivate = document.querySelector<HTMLInputElement>('#mp-room-is-private')!
+const mpActiveRoomPrivacyBadge = document.querySelector<HTMLSpanElement>('#mp-active-room-privacy-badge')!
+const mpRoomCodeDisplay = document.querySelector<HTMLSpanElement>('#mp-room-code-display')!
+const btnCopyCode = document.querySelector<HTMLButtonElement>('#btn-copy-code')!
 
 // Online City Player List Overlay Elements (Phase 15)
 const cityPlayerListCard = document.querySelector<HTMLDivElement>('#city-player-list-card')!
@@ -879,11 +978,14 @@ async function bootstrap() {
     networkManager,
   })
 
-  // 6. Mode Selection Modal Management
+  // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18)
   let isModalOpen = false
+  let isMpModalOpen = false
+  let activeMasterTab: 'play' | 'online' = 'online'
+
   const renderModeCards = () => {
     const active = modeManager.getActiveMode()
-    modeGridContainer.innerHTML = modeManager
+    const html = modeManager
       .getAllModes()
       .map(
         (m) => `
@@ -905,32 +1007,71 @@ async function bootstrap() {
       )
       .join('')
 
-    modeGridContainer.querySelectorAll<HTMLDivElement>('.mode-card-item').forEach((card) => {
-      card.addEventListener('click', () => {
-        const modeType = card.dataset.mode as GameModeType
-        if (modeType) {
-          modeManager.setMode(modeType)
-          renderModeCards()
-          closeModal()
-        }
-      })
+    if (modeGridContainer) modeGridContainer.innerHTML = html
+    if (masterModeGrid) masterModeGrid.innerHTML = html
+
+    const onCardClick = (card: HTMLElement) => {
+      const modeType = card.dataset.mode as GameModeType
+      if (modeType) {
+        modeManager.setMode(modeType)
+        renderModeCards()
+        closeMasterModal()
+      }
+    }
+
+    modeGridContainer?.querySelectorAll<HTMLDivElement>('.mode-card-item').forEach((card) => {
+      card.addEventListener('click', () => onCardClick(card))
+    })
+    masterModeGrid?.querySelectorAll<HTMLDivElement>('.mode-card-item').forEach((card) => {
+      card.addEventListener('click', () => onCardClick(card))
     })
   }
 
-  const openModal = () => {
-    isModalOpen = true
-    modeModal.classList.add('open')
-    renderModeCards()
+  const switchMasterTab = (tab: 'play' | 'online') => {
+    activeMasterTab = tab
+    if (tab === 'play') {
+      mainNavPlay.classList.add('active')
+      mainNavOnline.classList.remove('active')
+      mpPlayView.style.display = 'block'
+      mpOnlineView.style.display = 'none'
+      renderModeCards()
+    } else {
+      mainNavOnline.classList.add('active')
+      mainNavPlay.classList.remove('active')
+      mpPlayView.style.display = 'none'
+      mpOnlineView.style.display = 'flex'
+      networkManager.refreshRooms()
+    }
   }
 
-  const closeModal = () => {
+  mainNavPlay.addEventListener('click', () => switchMasterTab('play'))
+  mainNavOnline.addEventListener('click', () => switchMasterTab('online'))
+
+  const openMasterModal = (tab: 'play' | 'online' = 'online') => {
+    isMpModalOpen = true
+    isModalOpen = true
+    mpModal.classList.add('open')
+    switchMasterTab(tab)
+  }
+
+  const closeMasterModal = () => {
+    isMpModalOpen = false
     isModalOpen = false
+    mpModal.classList.remove('open')
     modeModal.classList.remove('open')
   }
 
+  const openModal = () => openMasterModal('play')
+  const closeModal = () => closeMasterModal()
   const toggleModal = () => {
-    if (isModalOpen) closeModal()
-    else openModal()
+    if (isMpModalOpen && activeMasterTab === 'play') closeMasterModal()
+    else openMasterModal('play')
+  }
+
+  const closeMpModal = () => closeMasterModal()
+  const toggleMpModal = () => {
+    if (isMpModalOpen && activeMasterTab === 'online') closeMasterModal()
+    else openMasterModal('online')
   }
 
   btnMenu.addEventListener('click', toggleModal)
@@ -977,28 +1118,8 @@ async function bootstrap() {
     openModal()
   })
 
-  // 8. Multiplayer Manager & Modal Management (Phase 12 & 13)
+  // 8. Multiplayer Manager & Modal Management (Phase 12, 13 & 18)
   let netSyncAccumulator = 0
-  let isMpModalOpen = false
-
-  const openMpModal = () => {
-    isMpModalOpen = true
-    mpModal.classList.add('open')
-    networkManager.refreshRooms()
-  }
-
-  const closeMpModal = () => {
-    isMpModalOpen = false
-    mpModal.classList.remove('open')
-  }
-
-  const toggleMpModal = () => {
-    if (isMpModalOpen) closeMpModal()
-    else {
-      if (isModalOpen) closeModal()
-      openMpModal()
-    }
-  }
 
   btnMultiplayer.addEventListener('click', toggleMpModal)
   mpModalClose.addEventListener('click', closeMpModal)
@@ -1026,11 +1147,72 @@ async function bootstrap() {
   })
 
   btnMpReconnect.addEventListener('click', () => {
+    btnMpReconnect.disabled = true
+    btnMpReconnect.textContent = 'Bağlanıyor...'
     networkManager.connect()
+    setTimeout(() => {
+      btnMpReconnect.disabled = false
+      btnMpReconnect.textContent = 'Yeniden Bağlan'
+    }, 2500)
   })
 
   mpNameInput.addEventListener('input', () => {
     networkManager.setPlayerName(mpNameInput.value.trim())
+  })
+
+  // Phase 18: Quick Join
+  btnQuickJoin.addEventListener('click', async () => {
+    btnQuickJoin.disabled = true
+    btnQuickJoin.textContent = 'Eşleşiliyor...'
+    try {
+      const preferredMode = mpQuickMode.value || undefined
+      await networkManager.quickJoin({
+        preferredMode,
+        playerName: mpNameInput.value.trim() || undefined,
+      })
+    } catch (err: any) {
+      alert(err.message || 'Hızlı eşleşme başarısız oldu')
+    } finally {
+      btnQuickJoin.disabled = false
+      btnQuickJoin.textContent = '⚡ Hemen Oyna'
+    }
+  })
+
+  // Phase 18: Join by Private Room Code
+  btnJoinCode.addEventListener('click', async () => {
+    const code = mpRoomCodeInput.value.trim().toUpperCase()
+    if (!code) {
+      alert('Lütfen katılmak için 4 haneli oda kodunu girin (Örn: A7X9)')
+      return
+    }
+    btnJoinCode.disabled = true
+    btnJoinCode.textContent = 'Katılınıyor...'
+    try {
+      await networkManager.joinRoomByCode(code, mpNameInput.value.trim() || undefined)
+      mpRoomCodeInput.value = ''
+    } catch (err: any) {
+      alert(err.message || 'Odaya katılınamadı. Kod geçersiz veya oda dolu olabilir.')
+    } finally {
+      btnJoinCode.disabled = false
+      btnJoinCode.textContent = 'Koda Katıl'
+    }
+  })
+
+  // Phase 18: Copy Room Code
+  btnCopyCode.addEventListener('click', () => {
+    const code = mpRoomCodeDisplay.textContent || ''
+    if (code && code !== '----') {
+      navigator.clipboard.writeText(code).then(() => {
+        btnCopyCode.textContent = 'Kopyalandı! ✔'
+        btnCopyCode.classList.add('copied')
+        setTimeout(() => {
+          btnCopyCode.textContent = '📋 Kopyala'
+          btnCopyCode.classList.remove('copied')
+        }, 2000)
+      }).catch(() => {
+        btnCopyCode.textContent = 'Kopyalanamadı'
+      })
+    }
   })
 
   // Create room
@@ -1038,6 +1220,7 @@ async function bootstrap() {
     const name = mpRoomName.value.trim() || 'Hızlı Yarış'
     const mode = mpRoomMode.value
     const maxPlayers = Number(mpRoomMax.value) || 8
+    const isPrivate = mpRoomIsPrivate.checked
 
     try {
       btnSubmitCreateRoom.disabled = true
@@ -1047,6 +1230,7 @@ async function bootstrap() {
         mode,
         map: mode === 'CITY_FREE_ROAM' ? 'CITY' : mode === 'RACE' ? 'RACE_TRACK' : 'DRIFT_TRACK',
         maxPlayers,
+        isPrivate,
         playerName: mpNameInput.value.trim() || undefined,
       })
     } catch (err: any) {
@@ -1062,14 +1246,16 @@ async function bootstrap() {
     await networkManager.leaveRoom()
   })
 
-  // Render Rooms
+  // Render Rooms (Phase 18 UX: Full state, roomCode badges, disabled button)
   const renderRoomsList = (rooms: ReturnType<typeof networkManager.getAvailableRooms>) => {
+    mpRoomsCount.textContent = String(rooms ? rooms.length : 0)
+
     if (!rooms || rooms.length === 0) {
       mpRoomList.innerHTML = `
         <div class="mp-empty-state">
           <div style="font-size: 24px;">🏎️</div>
           <div style="font-weight: 700; margin-top: 6px; color: #f8fafc;">Şu anda açık oda yok</div>
-          <div style="margin-top: 4px;">"+ Yeni Oda Kur" sekmesinden yeni bir oda açıp arkadaşlarınla oynayabilirsin!</div>
+          <div style="margin-top: 4px;">"+ Yeni Oda Kur" sekmesinden yeni bir oda açabilir veya "Hızlı Eşleşme"yi deneyebilirsin!</div>
         </div>
       `
       return
@@ -1078,11 +1264,20 @@ async function bootstrap() {
     mpRoomList.innerHTML = rooms
       .map((r) => {
         const modeLabel = r.mode === 'CITY_FREE_ROAM' ? '🏙️ Serbest Şehir' : r.mode === 'RACE' ? '🏁 Yarış Pisti' : '🔥 Drift Alanı'
+        const isFull = r.currentPlayers >= r.maxPlayers
+        const codePill = r.roomCode ? `<span class="mp-code-pill">#${r.roomCode}</span>` : ''
+        const statusBadge = isFull ? '<span class="mp-full-badge">DOLU</span>' : '<span class="mp-open-badge">AÇIK</span>'
+        const buttonHtml = isFull
+          ? `<button disabled class="action-btn disabled" style="padding: 8px 16px; font-size: 12px; flex: 0 0 auto;">Oda Dolu</button>`
+          : `<button class="action-btn primary btn-join-room" data-room-id="${r.id}" style="padding: 8px 16px; font-size: 12px; flex: 0 0 auto;">Katıl</button>`
+
         return `
           <div class="mp-room-item" data-room-id="${r.id}">
             <div class="mp-room-item-info">
               <div class="mp-room-name-row">
                 <span class="mp-room-name">${r.name}</span>
+                ${codePill}
+                ${statusBadge}
                 <span class="mp-room-count-badge">${r.currentPlayers}/${r.maxPlayers}</span>
               </div>
               <div class="mp-room-meta">
@@ -1091,9 +1286,7 @@ async function bootstrap() {
                 <span>Oda Sahibi: ${r.players[0]?.name || 'Bilinmiyor'}</span>
               </div>
             </div>
-            <button class="action-btn primary btn-join-room" data-room-id="${r.id}" style="padding: 8px 16px; font-size: 12px; flex: 0 0 auto;">
-              Katıl
-            </button>
+            ${buttonHtml}
           </div>
         `
       })
@@ -1116,15 +1309,18 @@ async function bootstrap() {
     })
   }
 
-  // Render Room Members
+  // Render Room Members (Phase 18 UX: Room Code Display, Copy Button, Privacy Badge)
   const renderRoomView = (room: NonNullable<ReturnType<typeof networkManager.getCurrentRoom>>) => {
     mpLobbyView.style.display = 'none'
     mpRoomView.style.display = 'block'
 
     mpActiveRoomName.textContent = room.name
-    const modeLabel = room.mode === 'CITY_FREE_ROAM' ? '🏙️ Serbest Şehir (City Free Roam)' : room.mode === 'RACE' ? '🏁 Yarış Pisti (Race Track)' : '🔥 Drift Alanı (Drift Track)'
+    const modeLabel = room.mode === 'CITY_FREE_ROAM' ? '🏙️ Serbest Şehir' : room.mode === 'RACE' ? '🏁 Yarış Pisti' : '🔥 Drift Alanı'
     mpActiveRoomSub.textContent = `Mod: ${modeLabel} | Kapasite: ${room.currentPlayers}/${room.maxPlayers}`
     mpMemberCount.textContent = `${room.currentPlayers}/${room.maxPlayers}`
+
+    mpRoomCodeDisplay.textContent = room.roomCode || room.id.slice(-4).toUpperCase()
+    mpActiveRoomPrivacyBadge.style.display = room.isPrivate ? 'inline-block' : 'none'
 
     const myId = networkManager.getPlayerId()
     mpMemberList.innerHTML = room.players
@@ -1145,7 +1341,16 @@ async function bootstrap() {
       .join('')
   }
 
-  // NetworkManager event bindings
+  // NetworkManager event bindings & Reconnect Tracking (Phase 18)
+  networkManager.onReconnectAttempt((attempt) => {
+    hudNetDot.className = 'status-dot reconnecting'
+    hudNetText.textContent = `Yeniden deneniyor (${attempt}/10)...`
+    mpStatusDot.className = 'status-dot reconnecting'
+    mpStatusTitle.textContent = `Sunucuya Yeniden Bağlanılıyor (Deneme ${attempt}/10)...`
+    mpStatusSub.textContent = 'WebSocket bağlantısı bekleniyor...'
+    btnMpReconnect.style.display = 'none'
+  })
+
   networkManager.onStatusChange((status, playerId) => {
     hudNetDot.className = `status-dot ${status}`
     mpStatusDot.className = `status-dot ${status}`
@@ -1156,9 +1361,11 @@ async function bootstrap() {
       hudNetId.textContent = `#${playerId}`
 
       mpStatusTitle.textContent = 'Çok Oyunculu Sunucuya Bağlandı'
-      mpStatusSub.textContent = `Durum: Aktif | Atanan Oyuncu ID: ${playerId}`
+      mpStatusSub.textContent = `WebSocket Aktif • Sunucu: http://localhost:3001`
       mpPlayerIdBadge.style.display = 'flex'
       mpPlayerIdText.textContent = playerId
+      mpPingBadge.style.display = 'flex'
+      mpPingText.textContent = `${networkManager.getPing()} ms`
       btnMpReconnect.style.display = 'none'
 
       if (!mpNameInput.value) {
@@ -1171,6 +1378,7 @@ async function bootstrap() {
       mpStatusTitle.textContent = 'Sunucuya Bağlanılıyor...'
       mpStatusSub.textContent = 'WebSocket el sıkışması başlatıldı...'
       mpPlayerIdBadge.style.display = 'none'
+      mpPingBadge.style.display = 'none'
       btnMpReconnect.style.display = 'none'
     } else {
       hudNetText.textContent = 'Çevrimdışı'
@@ -1178,6 +1386,7 @@ async function bootstrap() {
       mpStatusTitle.textContent = 'Sunucu Bağlantısı Yok'
       mpStatusSub.textContent = 'Yerel sunucu (localhost:3001) çalışmıyor olabilir.'
       mpPlayerIdBadge.style.display = 'none'
+      mpPingBadge.style.display = 'none'
       btnMpReconnect.style.display = 'inline-block'
     }
   })

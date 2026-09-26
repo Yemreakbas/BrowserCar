@@ -26,6 +26,7 @@ import type {
   DriftScoreSubmission,
   DriftLeaderboardPayload,
   DriftSessionFinishedPayload,
+  QuickJoinRequest,
 } from '../../shared/src/messages.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -82,6 +83,10 @@ export class NetworkManager {
   private driftSessionFinishedListeners = new Set<(payload: DriftSessionFinishedPayload) => void>()
   private driftRematchListeners = new Set<() => void>()
 
+  // Reconnection tracking (Phase 18)
+  private reconnectAttemptCount: number = 0
+  private reconnectListeners = new Set<(attempt: number) => void>()
+
   constructor(serverUrl: string = DEFAULT_SERVER_URL) {
     this.serverUrl = serverUrl
   }
@@ -125,7 +130,21 @@ export class NetworkManager {
 
     this.socket.on(SOCKET_EVENTS.CONNECT, () => {
       console.log(`[NetworkManager] Connected to server at ${this.serverUrl}`)
+      this.reconnectAttemptCount = 0
       this.startPingLoop()
+    })
+
+    this.socket.io.on('reconnect_attempt', (attempt: number) => {
+      this.reconnectAttemptCount = attempt
+      console.log(`[NetworkManager] Reconnecting... Attempt ${attempt}`)
+      for (const listener of this.reconnectListeners) {
+        listener(attempt)
+      }
+    })
+
+    this.socket.io.on('reconnect', () => {
+      this.reconnectAttemptCount = 0
+      console.log('[NetworkManager] Reconnected successfully!')
     })
 
     this.socket.on(SOCKET_EVENTS.DISCONNECT, reason => {
@@ -382,7 +401,15 @@ export class NetworkManager {
     return this.currentPing
   }
 
-  public createRoom(options: { name: string; mode: string; map: string; maxPlayers?: number; playerName?: string }): Promise<RoomInfo> {
+  public createRoom(options: {
+    name: string
+    mode: string
+    map: string
+    maxPlayers?: number
+    playerName?: string
+    isPrivate?: boolean
+    roomCode?: string
+  }): Promise<RoomInfo> {
     return new Promise((resolve, reject) => {
       if (!this.socket || !this.socket.connected) {
         return reject(new Error('Sunucuya bağlı değil'))
@@ -394,6 +421,8 @@ export class NetworkManager {
         map: options.map,
         maxPlayers: options.maxPlayers,
         playerName: options.playerName || this.localPlayerName,
+        isPrivate: options.isPrivate,
+        roomCode: options.roomCode,
       }
 
       this.socket.emit(SOCKET_EVENTS.ROOM_CREATE, req, (res: { success: boolean; room?: RoomInfo; error?: string }) => {
@@ -407,14 +436,15 @@ export class NetworkManager {
     })
   }
 
-  public joinRoom(roomId: string, playerName?: string): Promise<RoomInfo> {
+  public joinRoom(roomIdOrCode: string, playerName?: string): Promise<RoomInfo> {
     return new Promise((resolve, reject) => {
       if (!this.socket || !this.socket.connected) {
         return reject(new Error('Sunucuya bağlı değil'))
       }
 
       const req: JoinRoomRequest = {
-        roomId,
+        roomId: roomIdOrCode,
+        roomCode: roomIdOrCode,
         playerName: playerName || this.localPlayerName,
       }
 
@@ -424,6 +454,32 @@ export class NetworkManager {
           resolve(res.room)
         } else {
           reject(new Error(res?.error || 'Odaya katılınamadı'))
+        }
+      })
+    })
+  }
+
+  public joinRoomByCode(roomCode: string, playerName?: string): Promise<RoomInfo> {
+    return this.joinRoom(roomCode, playerName)
+  }
+
+  public quickJoin(options?: { preferredMode?: string; playerName?: string }): Promise<RoomInfo> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.socket.connected) {
+        return reject(new Error('Sunucuya bağlı değil'))
+      }
+
+      const req: QuickJoinRequest = {
+        preferredMode: options?.preferredMode,
+        playerName: options?.playerName || this.localPlayerName,
+      }
+
+      this.socket.emit(SOCKET_EVENTS.ROOM_QUICK_JOIN, req, (res: { success: boolean; room?: RoomInfo; error?: string }) => {
+        if (res && res.success && res.room) {
+          this.currentRoom = res.room
+          resolve(res.room)
+        } else {
+          reject(new Error(res?.error || 'Hızlı katılım başarısız oldu'))
         }
       })
     })
@@ -493,6 +549,15 @@ export class NetworkManager {
 
   public getPlayerName(): string {
     return this.localPlayerName
+  }
+
+  public getReconnectAttempts(): number {
+    return this.reconnectAttemptCount
+  }
+
+  public onReconnectAttempt(callback: (attempt: number) => void): () => void {
+    this.reconnectListeners.add(callback)
+    return () => this.reconnectListeners.delete(callback)
   }
 
   // Subscriptions

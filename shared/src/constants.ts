@@ -36,6 +36,7 @@ export const SOCKET_EVENTS = {
   ROOM_CREATED: 'room:created',
   ROOM_JOIN: 'room:join',
   ROOM_JOINED: 'room:joined',
+  ROOM_QUICK_JOIN: 'room:quick_join',
   ROOM_LEAVE: 'room:leave',
   ROOM_LEFT: 'room:left',
   ROOM_LIST: 'room:list',

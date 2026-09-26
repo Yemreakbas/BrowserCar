@@ -29,6 +29,8 @@ export interface RoomInfo {
   driftState?: OnlineDriftState
   driftStartTime?: number
   driftSessionDuration?: number
+  roomCode?: string
+  isPrivate?: boolean
 }
 
 export interface PlayerInitPayload {
@@ -43,10 +45,18 @@ export interface CreateRoomRequest {
   map: string
   maxPlayers?: number
   playerName?: string
+  isPrivate?: boolean
+  roomCode?: string
 }
 
 export interface JoinRoomRequest {
-  roomId: string
+  roomId?: string
+  roomCode?: string
+  playerName?: string
+}
+
+export interface QuickJoinRequest {
+  preferredMode?: string
   playerName?: string
 }
 

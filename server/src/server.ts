@@ -22,6 +22,7 @@ import type {
   ReconcilePayload,
   RaceCheckpointPassRequest,
   DriftScoreSubmission,
+  QuickJoinRequest,
 } from '../../shared/src/messages.ts'
 import { PlayerManager } from './players/PlayerManager.ts'
 import { RoomManager } from './rooms/RoomManager.ts'
@@ -282,7 +283,8 @@ io.on('connection', socket => {
         }
       }
 
-      const joinResult = roomManager.joinRoom(data.roomId, currentPlayer)
+      const identifier = data.roomCode || data.roomId || ''
+      const joinResult = roomManager.joinRoom(identifier, currentPlayer)
       if (!joinResult.success || !joinResult.room) {
         socket.emit(SOCKET_EVENTS.SERVER_ERROR, {
           code: 'JOIN_ROOM_FAILED',
@@ -334,7 +336,88 @@ io.on('connection', socket => {
         code: 'JOIN_ROOM_FAILED',
         message: 'Odaya katılırken beklenmeyen hata oluştu',
       })
-      if (typeof callback === 'function') callback({ success: false, error: 'Beklenmeyen hata' })
+      if (typeof callback === 'function') callback({ success: false, error: 'Odaya katılım başarısız' })
+    }
+  })
+
+  // --- ROOM: QUICK JOIN ---
+  socket.on(SOCKET_EVENTS.ROOM_QUICK_JOIN, (data: QuickJoinRequest, callback?: (response: unknown) => void) => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer) return
+
+      if (data?.playerName) {
+        playerManager.updatePlayerName(socket.id, data.playerName)
+        currentPlayer.name = data.playerName
+      }
+
+      const roomToJoin = roomManager.findQuickJoinRoom(data?.preferredMode)
+
+      const existingRoom = roomManager.findRoomByPlayerId(currentPlayer.id)
+      if (existingRoom && existingRoom.id !== roomToJoin.id) {
+        socket.leave(existingRoom.id)
+        const leaveRes = roomManager.leaveRoom(existingRoom.id, currentPlayer.id)
+        if (!leaveRes.roomDeleted && leaveRes.room) {
+          socket.to(existingRoom.id).emit(SOCKET_EVENTS.PLAYER_LEFT_ROOM, {
+            roomId: existingRoom.id,
+            playerId: currentPlayer.id,
+            room: leaveRes.room,
+          })
+        }
+      }
+
+      const joinResult = roomManager.joinRoom(roomToJoin.id, currentPlayer)
+      if (!joinResult.success || !joinResult.room) {
+        socket.emit(SOCKET_EVENTS.SERVER_ERROR, {
+          code: 'JOIN_ROOM_FAILED',
+          message: joinResult.error || 'Hızlı odaya katılınamadı',
+        })
+        if (typeof callback === 'function') callback({ success: false, error: joinResult.error })
+        return
+      }
+
+      const room = joinResult.room
+      playerManager.setPlayerRoom(socket.id, room.id)
+      socket.join(room.id)
+
+      console.log(`[Multiplayer] Quick join: Player ${currentPlayer.id} joined room ${room.id} (${room.currentPlayers}/${room.maxPlayers})`)
+
+      const assignedPlayer = joinResult.player || currentPlayer
+      const roomJoinedPayload: RoomJoinedPayload = {
+        room,
+        player: assignedPlayer,
+      }
+      socket.emit(SOCKET_EVENTS.ROOM_JOINED, roomJoinedPayload)
+
+      const roomSnapshot = roomManager.getRoomSnapshot(room.id, currentServerTick)
+      if (roomSnapshot) {
+        socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, roomSnapshot)
+      }
+
+      const playerJoinedPayload: PlayerJoinedRoomPayload = {
+        roomId: room.id,
+        player: assignedPlayer,
+        room,
+      }
+      socket.to(room.id).emit(SOCKET_EVENTS.PLAYER_JOINED_ROOM, playerJoinedPayload)
+
+      if (room.mode === 'RACE') {
+        onlineRaceManager.handlePlayerJoined(room, assignedPlayer)
+      } else if (room.mode === 'DRIFT') {
+        onlineDriftManager.getOrCreateSession(room)
+        onlineDriftManager.addPlayer(room.id, assignedPlayer)
+      }
+
+      if (typeof callback === 'function') callback({ success: true, room })
+
+      broadcastRoomList()
+    } catch (err) {
+      console.error('[Multiplayer] Error in quick join:', err)
+      socket.emit(SOCKET_EVENTS.SERVER_ERROR, {
+        code: 'QUICK_JOIN_FAILED',
+        message: 'Hızlı katılırken beklenmeyen hata oluştu',
+      })
+      if (typeof callback === 'function') callback({ success: false, error: 'Hızlı katılım başarısız' })
     }
   })
 
