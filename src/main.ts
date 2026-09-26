@@ -18,7 +18,12 @@ import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
 import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
 import { VehicleResetSystem } from './vehicle/VehicleResetSystem.ts'
 import { OnlineRaceState, OnlineDriftState } from '../shared/src/constants.ts'
-import type { RaceParticipantResult, DriftParticipantProgress } from '../shared/src/messages.ts'
+import type {
+  RaceParticipantResult,
+  DriftParticipantProgress,
+  LeaderboardCategory,
+  LeaderboardAllPayload,
+} from '../shared/src/messages.ts'
 import { FollowCamera, type CameraPreset } from './camera/FollowCamera.ts'
 import { AudioManager } from './audio/AudioManager.ts'
 import {
@@ -67,6 +72,11 @@ app.innerHTML = `
           <span style="font-size: 13px;">👤</span>
           <span>Profil</span>
           <span class="reset-key-hint">P</span>
+        </button>
+        <button id="btn-leaderboards" class="reset-btn" type="button" title="Liderlik Tabloları ve Rekorlar (L)">
+          <span style="font-size: 13px;">🏆</span>
+          <span>Sıralama</span>
+          <span class="reset-key-hint">L</span>
         </button>
         <button id="btn-spawn" class="reset-btn" type="button" title="Başlangıç Konumunu Değiştir (C)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -349,6 +359,10 @@ app.innerHTML = `
           <span>👤</span>
           <span>PROFİL (SÜRÜCÜ)</span>
         </button>
+        <button id="main-nav-leaderboards" class="mp-master-tab-btn" type="button">
+          <span>🏆</span>
+          <span>SIRALAMA (REKORLAR)</span>
+        </button>
         <button id="main-nav-online" class="mp-master-tab-btn active" type="button">
           <span>🌐</span>
           <span>ONLINE (ÇOK OYUNCULU)</span>
@@ -490,6 +504,77 @@ app.innerHTML = `
             <button id="btn-profile-reset" class="btn-profile-reset" type="button">
               Profili Sıfırla (Yeni Sürücü)
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leaderboards View (Phase 25) -->
+      <div id="mp-leaderboards-view" class="leaderboard-view-container" style="display: none;">
+        <div class="leaderboard-header-bar">
+          <div class="leaderboard-header-titles">
+            <div class="leaderboard-main-title">
+              <span>🏆</span>
+              <span>Liderlik Tablosu & Rekorlar</span>
+            </div>
+            <div class="leaderboard-subtitle">
+              Sunucu tarafından onaylanmış resmi yarış turları, drift puanları ve azami hızlar.
+            </div>
+          </div>
+          <button id="btn-leaderboard-refresh" class="btn-leaderboard-refresh" type="button">
+            <span>🔄</span>
+            <span>Yenile</span>
+          </button>
+        </div>
+
+        <!-- Category Selector Tabs -->
+        <div class="leaderboard-categories">
+          <button id="btn-lb-cat-fastest-lap" class="btn-lb-cat active" type="button">
+            <span>⏱️</span>
+            <span>En Hızlı Tur</span>
+          </button>
+          <button id="btn-lb-cat-drift-score" class="btn-lb-cat" type="button">
+            <span>⚡</span>
+            <span>Drift Puanı</span>
+          </button>
+          <button id="btn-lb-cat-drift-combo" class="btn-lb-cat" type="button">
+            <span>🔥</span>
+            <span>Drift Kombo</span>
+          </button>
+          <button id="btn-lb-cat-city-speed" class="btn-lb-cat" type="button">
+            <span>🚀</span>
+            <span>Şehir Hızı</span>
+          </button>
+        </div>
+
+        <!-- Personal Standing Card -->
+        <div id="lb-user-banner" class="leaderboard-user-banner">
+          <div class="leaderboard-user-info">
+            <div id="lb-user-rank-badge" class="leaderboard-user-rank-badge">#--</div>
+            <div class="leaderboard-user-details">
+              <div id="lb-user-name" class="leaderboard-user-name">Pilot</div>
+              <div id="lb-user-sub" class="leaderboard-user-sub">En Hızlı Tur Sıralaması</div>
+            </div>
+          </div>
+          <div id="lb-user-score" class="leaderboard-user-score">--</div>
+        </div>
+
+        <!-- Leaderboard Table Card -->
+        <div class="leaderboard-table-card">
+          <div class="leaderboard-table-wrap">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px;">Sıra</th>
+                  <th>Pilot</th>
+                  <th>Araç</th>
+                  <th id="lb-col-score-title">Tur Zamanı</th>
+                  <th style="text-align: right; width: 120px;">Tarih</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-table-body">
+                <!-- Dynamically rendered -->
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -742,6 +827,7 @@ const btnSpawn = document.querySelector<HTMLButtonElement>('#btn-spawn')!
 const btnMenu = document.querySelector<HTMLButtonElement>('#btn-menu')!
 const btnGarage = document.querySelector<HTMLButtonElement>('#btn-garage')!
 const btnProfile = document.querySelector<HTMLButtonElement>('#btn-profile')!
+const btnLeaderboards = document.querySelector<HTMLButtonElement>('#btn-leaderboards')!
 const btnAudio = document.querySelector<HTMLButtonElement>('#btn-audio')!
 const audioBtnIcon = document.querySelector<HTMLSpanElement>('#audio-btn-icon')!
 const audioBtnText = document.querySelector<HTMLSpanElement>('#audio-btn-text')!
@@ -851,9 +937,22 @@ const mpMemberList = document.querySelector<HTMLDivElement>('#mp-member-list')!
 const mainNavPlay = document.querySelector<HTMLButtonElement>('#main-nav-play')!
 const mainNavGarage = document.querySelector<HTMLButtonElement>('#main-nav-garage')!
 const mainNavProfile = document.querySelector<HTMLButtonElement>('#main-nav-profile')!
+const mainNavLeaderboards = document.querySelector<HTMLButtonElement>('#main-nav-leaderboards')!
 const mainNavOnline = document.querySelector<HTMLButtonElement>('#main-nav-online')!
 const mpPlayView = document.querySelector<HTMLDivElement>('#mp-play-view')!
 const mpGarageView = document.querySelector<HTMLDivElement>('#mp-garage-view')!
+const mpLeaderboardsView = document.querySelector<HTMLDivElement>('#mp-leaderboards-view')!
+const btnLeaderboardRefresh = document.querySelector<HTMLButtonElement>('#btn-leaderboard-refresh')!
+const btnLbCatFastestLap = document.querySelector<HTMLButtonElement>('#btn-lb-cat-fastest-lap')!
+const btnLbCatDriftScore = document.querySelector<HTMLButtonElement>('#btn-lb-cat-drift-score')!
+const btnLbCatDriftCombo = document.querySelector<HTMLButtonElement>('#btn-lb-cat-drift-combo')!
+const btnLbCatCitySpeed = document.querySelector<HTMLButtonElement>('#btn-lb-cat-city-speed')!
+const lbUserRankBadge = document.querySelector<HTMLDivElement>('#lb-user-rank-badge')!
+const lbUserName = document.querySelector<HTMLDivElement>('#lb-user-name')!
+const lbUserSub = document.querySelector<HTMLDivElement>('#lb-user-sub')!
+const lbUserScore = document.querySelector<HTMLDivElement>('#lb-user-score')!
+const lbColScoreTitle = document.querySelector<HTMLTableCellElement>('#lb-col-score-title')!
+const leaderboardTableBody = document.querySelector<HTMLTableSectionElement>('#leaderboard-table-body')!
 const garageActiveBadge = document.querySelector<HTMLSpanElement>('#garage-active-badge')!
 const garageCarGrid = document.querySelector<HTMLDivElement>('#garage-car-grid')!
 const mpProfileView = document.querySelector<HTMLDivElement>('#mp-profile-view')!
@@ -1106,6 +1205,16 @@ async function bootstrap() {
         .join('')
 
       playerProfileManager.recordRaceResult(result.bestLapTime, result.lapTimes.length, true)
+      if (result.bestLapTime && result.bestLapTime >= 10.0) {
+        const carDef = vehicle.getActiveDefinition()
+        networkManager.submitLeaderboardRecord({
+          category: 'fastest_lap',
+          score: result.bestLapTime,
+          carId: carDef.id,
+          carName: carDef.name,
+          trackId: 'circuit',
+        }).catch(() => {})
+      }
       raceResultsModal.classList.add('open')
     },
     showMultiplayerRaceResults(results: RaceParticipantResult[]) {
@@ -1239,6 +1348,15 @@ async function bootstrap() {
 
       if (myResult) {
         playerProfileManager.recordDriftResult(myResult.totalScore, 1.0)
+        if (myResult.totalScore >= 50) {
+          const carDef = vehicle.getActiveDefinition()
+          networkManager.submitLeaderboardRecord({
+            category: 'best_drift_score',
+            score: myResult.totalScore,
+            carId: carDef.id,
+            carName: carDef.name,
+          }).catch(() => {})
+        }
       }
       driftResultsModal.classList.add('open')
     },
@@ -1348,7 +1466,7 @@ async function bootstrap() {
   // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18, 23 & 24)
   let isModalOpen = false
   let isMpModalOpen = false
-  let activeMasterTab: 'play' | 'garage' | 'profile' | 'online' = 'online'
+  let activeMasterTab: 'play' | 'garage' | 'profile' | 'leaderboards' | 'online' = 'online'
 
   const renderProfileView = () => {
     const profile = playerProfileManager.getProfile()
@@ -1545,16 +1663,187 @@ async function bootstrap() {
     })
   }
 
-  const switchMasterTab = (tab: 'play' | 'garage' | 'profile' | 'online') => {
+  // --- PHASE 25: LEADERBOARDS CONTROLLER ---
+  let activeLeaderboardCategory: LeaderboardCategory = 'fastest_lap'
+  let cachedLeaderboards: LeaderboardAllPayload | null = null
+  let isFetchingLeaderboards = false
+
+  const updateCategoryTabStyles = () => {
+    btnLbCatFastestLap.classList.toggle('active', activeLeaderboardCategory === 'fastest_lap')
+    btnLbCatDriftScore.classList.toggle('active', activeLeaderboardCategory === 'best_drift_score')
+    btnLbCatDriftCombo.classList.toggle('active', activeLeaderboardCategory === 'best_drift_combo')
+    btnLbCatCitySpeed.classList.toggle('active', activeLeaderboardCategory === 'city_top_speed')
+  }
+
+  const renderActiveLeaderboardTable = () => {
+    updateCategoryTabStyles()
+    const profile = playerProfileManager.getProfile()
+
+    // Title of score column
+    switch (activeLeaderboardCategory) {
+      case 'fastest_lap':
+        lbColScoreTitle.textContent = 'Tur Zamanı'
+        break
+      case 'best_drift_score':
+        lbColScoreTitle.textContent = 'Drift Skoru'
+        break
+      case 'best_drift_combo':
+        lbColScoreTitle.textContent = 'Kombo Çarpanı'
+        break
+      case 'city_top_speed':
+        lbColScoreTitle.textContent = 'Azami Hız'
+        break
+    }
+
+    const categoryEntries = cachedLeaderboards ? (cachedLeaderboards[activeLeaderboardCategory] || []) : []
+
+    // 1. Personal Banner Update
+    const myEntry = categoryEntries.find((e) => e.playerId === profile.id)
+    if (myEntry) {
+      lbUserRankBadge.textContent = `#${myEntry.rank || '?'}`
+      lbUserName.textContent = `${profile.displayName} (Sen)`
+      lbUserSub.textContent = `${getVehicleDefinition(myEntry.carId)?.name || myEntry.carName} • Resmi Sıralama`
+      lbUserScore.textContent = myEntry.formattedScore
+      lbUserScore.style.color = '#38bdf8'
+    } else {
+      let localScoreStr = '--'
+      let localSubStr = 'Henüz Liderlik Tablosunda Değilsin'
+      if (activeLeaderboardCategory === 'fastest_lap' && profile.stats.bestLapTime !== null) {
+        localScoreStr = formatTime(profile.stats.bestLapTime)
+        localSubStr = 'Kişisel En İyi Turun (Geliştirmeye Devam Et)'
+      } else if (activeLeaderboardCategory === 'best_drift_score' && profile.stats.bestDriftScore > 0) {
+        localScoreStr = `${profile.stats.bestDriftScore.toLocaleString()} Puan`
+        localSubStr = 'Kişisel En İyi Drift Skorun'
+      } else if (activeLeaderboardCategory === 'best_drift_combo' && profile.stats.maxDriftCombo > 1.0) {
+        localScoreStr = `${profile.stats.maxDriftCombo.toFixed(1)}x Kombo`
+        localSubStr = 'Kişisel En Yüksek Kombo Çarpanın'
+      } else if (activeLeaderboardCategory === 'city_top_speed') {
+        localScoreStr = `${Math.round(vehicle.getSpeedKmh())} km/h (Mevcut)`
+        localSubStr = 'Şehirde Gaza Bas ve 100+ km/h ile Sıralamaya Gir'
+      }
+
+      lbUserRankBadge.textContent = '#--'
+      lbUserName.textContent = profile.displayName
+      lbUserSub.textContent = localSubStr
+      lbUserScore.textContent = localScoreStr
+      lbUserScore.style.color = '#94a3b8'
+    }
+
+    // 2. Table Rows
+    if (categoryEntries.length === 0) {
+      leaderboardTableBody.innerHTML = `
+        <tr>
+          <td colspan="5">
+            <div class="leaderboard-empty-state">
+              <span style="font-size: 24px;">🏁</span>
+              <div style="font-weight: 700; color: #f8fafc;">Henüz Bu Kategoride Kayıt Bulunmuyor</div>
+              <div style="font-size: 11px;">İlk rekoru sen kır! Pistte gazla veya drift yap.</div>
+            </div>
+          </td>
+        </tr>
+      `
+      return
+    }
+
+    const rowsHtml = categoryEntries.map((entry, idx) => {
+      const rankNum = entry.rank || idx + 1
+      const isMe = entry.playerId === profile.id
+      const rankClass = rankNum === 1 ? 'leaderboard-rank-1' : rankNum === 2 ? 'leaderboard-rank-2' : rankNum === 3 ? 'leaderboard-rank-3' : 'leaderboard-rank-default'
+      const rankIcon = rankNum === 1 ? '🥇 1' : rankNum === 2 ? '🥈 2' : rankNum === 3 ? '🥉 3' : `${rankNum}`
+
+      const dateStr = entry.date ? new Date(entry.date).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '--:--'
+
+      return `
+        <tr class="${isMe ? 'leaderboard-row-me' : ''}">
+          <td>
+            <span class="leaderboard-rank-badge ${rankClass}">${rankIcon}</span>
+          </td>
+          <td>
+            <div class="leaderboard-pilot-col">
+              <span class="leaderboard-pilot-name">${entry.playerName || 'Anonim Pilot'}</span>
+              ${isMe ? '<span class="leaderboard-you-pill">SEN</span>' : ''}
+            </div>
+          </td>
+          <td>
+            <span class="leaderboard-car-pill">${entry.carName || 'Yarış Aracı'}</span>
+          </td>
+          <td>
+            <span class="leaderboard-score-val">${entry.formattedScore}</span>
+          </td>
+          <td style="text-align: right;" class="leaderboard-date-col">
+            ${dateStr}
+          </td>
+        </tr>
+      `
+    }).join('')
+
+    leaderboardTableBody.innerHTML = rowsHtml
+  }
+
+  const renderLeaderboardsView = async (forceRefresh = false) => {
+    if (!cachedLeaderboards || forceRefresh) {
+      if (isFetchingLeaderboards) return
+      isFetchingLeaderboards = true
+      btnLeaderboardRefresh.textContent = '⏳ Yükleniyor...'
+      try {
+        const data = await networkManager.fetchLeaderboards()
+        if (data) {
+          cachedLeaderboards = data
+        }
+      } catch (err) {
+        console.warn('[Leaderboard] Error loading data:', err)
+      } finally {
+        isFetchingLeaderboards = false
+        btnLeaderboardRefresh.innerHTML = '<span>🔄</span><span>Yenile</span>'
+      }
+    }
+    renderActiveLeaderboardTable()
+  }
+
+  networkManager.onLeaderboardUpdate((payload) => {
+    cachedLeaderboards = payload
+    if (isMpModalOpen && activeMasterTab === 'leaderboards') {
+      renderActiveLeaderboardTable()
+    }
+  })
+
+  btnLbCatFastestLap.addEventListener('click', () => {
+    audioManager.playClick()
+    activeLeaderboardCategory = 'fastest_lap'
+    renderActiveLeaderboardTable()
+  })
+  btnLbCatDriftScore.addEventListener('click', () => {
+    audioManager.playClick()
+    activeLeaderboardCategory = 'best_drift_score'
+    renderActiveLeaderboardTable()
+  })
+  btnLbCatDriftCombo.addEventListener('click', () => {
+    audioManager.playClick()
+    activeLeaderboardCategory = 'best_drift_combo'
+    renderActiveLeaderboardTable()
+  })
+  btnLbCatCitySpeed.addEventListener('click', () => {
+    audioManager.playClick()
+    activeLeaderboardCategory = 'city_top_speed'
+    renderActiveLeaderboardTable()
+  })
+  btnLeaderboardRefresh.addEventListener('click', () => {
+    audioManager.playClick()
+    renderLeaderboardsView(true)
+  })
+
+  const switchMasterTab = (tab: 'play' | 'garage' | 'profile' | 'leaderboards' | 'online') => {
     activeMasterTab = tab
     mainNavPlay.classList.toggle('active', tab === 'play')
     mainNavGarage.classList.toggle('active', tab === 'garage')
     mainNavProfile.classList.toggle('active', tab === 'profile')
+    mainNavLeaderboards.classList.toggle('active', tab === 'leaderboards')
     mainNavOnline.classList.toggle('active', tab === 'online')
 
     mpPlayView.style.display = tab === 'play' ? 'block' : 'none'
     mpGarageView.style.display = tab === 'garage' ? 'block' : 'none'
     mpProfileView.style.display = tab === 'profile' ? 'block' : 'none'
+    mpLeaderboardsView.style.display = tab === 'leaderboards' ? 'flex' : 'none'
     mpOnlineView.style.display = tab === 'online' ? 'flex' : 'none'
 
     if (tab === 'play') {
@@ -1563,6 +1852,8 @@ async function bootstrap() {
       renderGarageCars()
     } else if (tab === 'profile') {
       renderProfileView()
+    } else if (tab === 'leaderboards') {
+      renderLeaderboardsView()
     } else if (tab === 'online') {
       networkManager.refreshRooms()
     }
@@ -1580,12 +1871,16 @@ async function bootstrap() {
     audioManager.playClick()
     switchMasterTab('profile')
   })
+  mainNavLeaderboards.addEventListener('click', () => {
+    audioManager.playClick()
+    switchMasterTab('leaderboards')
+  })
   mainNavOnline.addEventListener('click', () => {
     audioManager.playClick()
     switchMasterTab('online')
   })
 
-  const openMasterModal = (tab: 'play' | 'garage' | 'profile' | 'online' = 'online') => {
+  const openMasterModal = (tab: 'play' | 'garage' | 'profile' | 'leaderboards' | 'online' = 'online') => {
     isMpModalOpen = true
     isModalOpen = true
     mpModal.classList.add('open')
@@ -1616,6 +1911,11 @@ async function bootstrap() {
     else openMasterModal('profile')
   }
 
+  const toggleLeaderboardsModal = () => {
+    if (isMpModalOpen && activeMasterTab === 'leaderboards') closeMasterModal()
+    else openMasterModal('leaderboards')
+  }
+
   const closeMpModal = () => closeMasterModal()
   const toggleMpModal = () => {
     if (isMpModalOpen && activeMasterTab === 'online') closeMasterModal()
@@ -1630,6 +1930,10 @@ async function bootstrap() {
   btnProfile.addEventListener('click', () => {
     audioManager.playClick()
     toggleProfileModal()
+  })
+  btnLeaderboards.addEventListener('click', () => {
+    audioManager.playClick()
+    toggleLeaderboardsModal()
   })
   btnProfileGoGarage.addEventListener('click', () => {
     audioManager.playClick()
@@ -2485,6 +2789,9 @@ async function bootstrap() {
       case 'KeyP':
         openMasterModal('profile')
         break
+      case 'KeyL':
+        toggleLeaderboardsModal()
+        break
     }
   })
 
@@ -2546,6 +2853,7 @@ async function bootstrap() {
   let previousVehicleSpeed = 0
   let profileStatsTimer = 0
   let accumulatedDistanceMeters = 0
+  let lastTopSpeedSubmitTime = 0
 
   function animate() {
     requestAnimationFrame(animate)
@@ -2608,6 +2916,21 @@ async function bootstrap() {
       playerProfileManager.addDistanceAndPlaytime(accumulatedDistanceMeters, profileStatsTimer)
       accumulatedDistanceMeters = 0
       profileStatsTimer = 0
+    }
+
+    // 9.4e Top Speed Leaderboard Throttle (Phase 25)
+    if (speedKmh >= 100) {
+      const nowMs = performance.now()
+      if (nowMs - lastTopSpeedSubmitTime > 4000) {
+        lastTopSpeedSubmitTime = nowMs
+        const carDef = vehicle.getActiveDefinition()
+        networkManager.submitLeaderboardRecord({
+          category: 'city_top_speed',
+          score: Math.round(speedKmh),
+          carId: carDef.id,
+          carName: carDef.name,
+        }).catch(() => {})
+      }
     }
 
     netSyncAccumulator += delta

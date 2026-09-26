@@ -73,6 +73,13 @@ export const SOCKET_EVENTS = {
   DRIFT_SESSION_FINISHED: 'drift:session_finished',
   DRIFT_REMATCH: 'drift:rematch',
 
+  // Leaderboards (Phase 25)
+  LEADERBOARD_GET: 'leaderboard:get',
+  LEADERBOARD_DATA: 'leaderboard:data',
+  LEADERBOARD_ALL: 'leaderboard:all',
+  LEADERBOARD_SUBMIT: 'leaderboard:submit',
+  LEADERBOARD_UPDATE: 'leaderboard:update',
+
   // Errors / alerts
   SERVER_ERROR: 'server:error',
 } as const

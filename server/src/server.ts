@@ -31,6 +31,11 @@ import { PlayerManager } from './players/PlayerManager.ts'
 import { RoomManager } from './rooms/RoomManager.ts'
 import { OnlineRaceManager } from './race/OnlineRaceManager.ts'
 import { OnlineDriftManager } from './drift/OnlineDriftManager.ts'
+import { LeaderboardManager } from './leaderboard/LeaderboardManager.ts'
+import type {
+  LeaderboardCategory,
+  LeaderboardSubmitRequest,
+} from '../../shared/src/messages.ts'
 
 const PORT = Number(process.env.PORT) || DEFAULT_SERVER_PORT
 const startTime = Date.now()
@@ -38,6 +43,7 @@ let currentServerTick = 0
 
 const playerManager = new PlayerManager()
 const roomManager = new RoomManager()
+const leaderboardManager = new LeaderboardManager()
 
 // 1. Create HTTP Server with Health & Status Endpoints
 const httpServer = http.createServer((req, res) => {
@@ -70,6 +76,20 @@ const httpServer = http.createServer((req, res) => {
     return
   }
 
+  // Leaderboard REST Endpoints (Phase 25)
+  if (url.pathname === '/api/leaderboards') {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(leaderboardManager.getAll(50)))
+    return
+  }
+
+  if (url.pathname === '/api/leaderboard') {
+    const category = (url.searchParams.get('category') || 'fastest_lap') as LeaderboardCategory
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(leaderboardManager.getCategory(category, 50)))
+    return
+  }
+
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(
     JSON.stringify({
@@ -79,6 +99,7 @@ const httpServer = http.createServer((req, res) => {
       serverTick: currentServerTick,
       tickRateHz: SERVER_TICK_RATE,
       healthEndpoint: '/health',
+      leaderboardsEndpoint: '/api/leaderboards',
     })
   )
 })
@@ -93,13 +114,15 @@ const io = new SocketIOServer(httpServer, {
   pingTimeout: 5000,
 })
 
-const onlineRaceManager = new OnlineRaceManager(io)
+leaderboardManager.setSocketServer(io)
+
+const onlineRaceManager = new OnlineRaceManager(io, leaderboardManager)
 const defaultRaceRoom = roomManager.getRoom(DEFAULT_RACE_ROOM_ID)
 if (defaultRaceRoom) {
   onlineRaceManager.getOrCreateSession(defaultRaceRoom)
 }
 
-const onlineDriftManager = new OnlineDriftManager(io)
+const onlineDriftManager = new OnlineDriftManager(io, leaderboardManager)
 const defaultDriftRoom = roomManager.getRoom(DEFAULT_DRIFT_ROOM_ID)
 if (defaultDriftRoom) {
   onlineDriftManager.getOrCreateSession(defaultDriftRoom)
@@ -197,6 +220,18 @@ io.on('connection', socket => {
 
       // Forward validated state to other members in the room for immediate responsiveness
       socket.to(state.roomId).emit(SOCKET_EVENTS.PLAYER_STATE, result.state)
+
+      // Authoritative Top Speed Tracking (Phase 25)
+      if (result.state.speed >= 100) {
+        leaderboardManager.recordRecord(
+          'city_top_speed',
+          result.state.playerId,
+          result.state.playerName || 'Pilot',
+          'car-sedan',
+          'Hız Pilotu',
+          Math.round(result.state.speed)
+        )
+      }
     } catch (err) {
       console.warn('[Multiplayer] Error handling player state update:', err)
     }
@@ -681,6 +716,52 @@ io.on('connection', socket => {
       }
     } catch (err) {
       console.warn('[Multiplayer] Error in drift:rematch:', err)
+    }
+  })
+
+  // --- LEADERBOARDS (PHASE 25) ---
+  socket.on(SOCKET_EVENTS.LEADERBOARD_ALL, (callback?: (data: unknown) => void) => {
+    try {
+      const all = leaderboardManager.getAll(50)
+      if (typeof callback === 'function') {
+        callback(all)
+      } else {
+        socket.emit(SOCKET_EVENTS.LEADERBOARD_ALL, all)
+      }
+    } catch (err) {
+      console.warn('[Leaderboard] Error fetching all leaderboards:', err)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.LEADERBOARD_GET, (category: LeaderboardCategory, callback?: (data: unknown) => void) => {
+    try {
+      const catData = leaderboardManager.getCategory(category || 'fastest_lap', 50)
+      if (typeof callback === 'function') {
+        callback(catData)
+      } else {
+        socket.emit(SOCKET_EVENTS.LEADERBOARD_DATA, catData)
+      }
+    } catch (err) {
+      console.warn('[Leaderboard] Error fetching category leaderboard:', err)
+    }
+  })
+
+  socket.on(SOCKET_EVENTS.LEADERBOARD_SUBMIT, (data: LeaderboardSubmitRequest, callback?: (res: unknown) => void) => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      const auth = (socket.handshake.auth || {}) as { playerId?: string; displayName?: string }
+      const playerId = currentPlayer ? currentPlayer.id : (auth.playerId || socket.id)
+      const playerName = currentPlayer ? currentPlayer.name : (auth.displayName || 'Anonim Pilot')
+
+      const result = leaderboardManager.processClientSubmission(playerId, playerName, data)
+      if (typeof callback === 'function') {
+        callback(result)
+      }
+    } catch (err) {
+      console.warn('[Leaderboard] Error submitting leaderboard record:', err)
+      if (typeof callback === 'function') {
+        callback({ success: false, error: 'Sunucu hatası' })
+      }
     }
   })
 })

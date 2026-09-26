@@ -289,3 +289,53 @@ export interface DriftSessionFinishedPayload {
   leaderboard: DriftParticipantProgress[]
   winner: DriftParticipantProgress | null
 }
+
+// --- LEADERBOARDS (PHASE 25) ---
+export type LeaderboardCategory = 'fastest_lap' | 'best_drift_score' | 'best_drift_combo' | 'city_top_speed'
+
+export interface LeaderboardEntry {
+  id: string
+  category: LeaderboardCategory
+  playerId: string
+  playerName: string
+  carId: string
+  carName: string
+  score: number // lap time in sec (lower is better), or drift score (higher is better), or combo (higher is better), or top speed km/h (higher is better)
+  formattedScore: string
+  trackId?: string
+  date: number
+  rank?: number
+}
+
+export interface LeaderboardDataPayload {
+  category: LeaderboardCategory
+  entries: LeaderboardEntry[]
+  userRank?: {
+    rank: number
+    entry: LeaderboardEntry
+  } | null
+  updatedAt: number
+}
+
+export interface LeaderboardAllPayload {
+  fastest_lap: LeaderboardEntry[]
+  best_drift_score: LeaderboardEntry[]
+  best_drift_combo: LeaderboardEntry[]
+  city_top_speed: LeaderboardEntry[]
+  updatedAt: number
+}
+
+export interface LeaderboardSubmitRequest {
+  category: LeaderboardCategory
+  score: number
+  carId?: string
+  carName?: string
+  trackId?: string
+}
+
+export interface LeaderboardSubmitResponse {
+  success: boolean
+  rank?: number
+  isNewBest?: boolean
+  error?: string
+}

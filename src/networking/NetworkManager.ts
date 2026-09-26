@@ -29,6 +29,11 @@ import type {
   QuickJoinRequest,
   PlayerResetRequest,
   PlayerResetResponse,
+  LeaderboardCategory,
+  LeaderboardDataPayload,
+  LeaderboardAllPayload,
+  LeaderboardSubmitRequest,
+  LeaderboardSubmitResponse,
 } from '../../shared/src/messages.ts'
 import { PlayerProfileManager } from '../profile/PlayerProfile.ts'
 
@@ -89,6 +94,9 @@ export class NetworkManager {
   // Reconnection tracking (Phase 18)
   private reconnectAttemptCount: number = 0
   private reconnectListeners = new Set<(attempt: number) => void>()
+
+  // Leaderboard listeners (Phase 25)
+  private leaderboardUpdateListeners = new Set<(payload: LeaderboardAllPayload) => void>()
 
   constructor(serverUrl: string = DEFAULT_SERVER_URL) {
     this.serverUrl = serverUrl
@@ -325,6 +333,16 @@ export class NetworkManager {
     this.socket.on(SOCKET_EVENTS.DRIFT_REMATCH, () => {
       for (const listener of this.driftRematchListeners) {
         listener()
+      }
+    })
+
+    this.socket.on(SOCKET_EVENTS.LEADERBOARD_UPDATE, (payload: LeaderboardAllPayload) => {
+      for (const listener of this.leaderboardUpdateListeners) {
+        try {
+          listener(payload)
+        } catch (err) {
+          console.warn('[NetworkManager] Error in leaderboardUpdateListener:', err)
+        }
       }
     })
 
@@ -768,5 +786,64 @@ export class NetworkManager {
   public onDriftRematch(callback: () => void): () => void {
     this.driftRematchListeners.add(callback)
     return () => this.driftRematchListeners.delete(callback)
+  }
+
+  // --- LEADERBOARD METHODS (PHASE 25) ---
+  public onLeaderboardUpdate(callback: (payload: LeaderboardAllPayload) => void): () => void {
+    this.leaderboardUpdateListeners.add(callback)
+    return () => this.leaderboardUpdateListeners.delete(callback)
+  }
+
+  public async fetchLeaderboards(): Promise<LeaderboardAllPayload | null> {
+    if (this.socket && this.socket.connected) {
+      return new Promise((resolve) => {
+        this.socket!.emit(SOCKET_EVENTS.LEADERBOARD_ALL, (response: LeaderboardAllPayload) => {
+          resolve(response)
+        })
+        setTimeout(() => resolve(null), 3000)
+      })
+    }
+    // Fallback to HTTP
+    try {
+      const res = await fetch(`${this.serverUrl}/api/leaderboards`)
+      if (res.ok) {
+        return (await res.json()) as LeaderboardAllPayload
+      }
+    } catch (err) {
+      console.warn('[NetworkManager] HTTP leaderboards fallback error:', err)
+    }
+    return null
+  }
+
+  public async fetchCategoryLeaderboard(category: LeaderboardCategory): Promise<LeaderboardDataPayload | null> {
+    if (this.socket && this.socket.connected) {
+      return new Promise((resolve) => {
+        this.socket!.emit(SOCKET_EVENTS.LEADERBOARD_GET, category, (response: LeaderboardDataPayload) => {
+          resolve(response)
+        })
+        setTimeout(() => resolve(null), 3000)
+      })
+    }
+    try {
+      const res = await fetch(`${this.serverUrl}/api/leaderboard?category=${encodeURIComponent(category)}`)
+      if (res.ok) {
+        return (await res.json()) as LeaderboardDataPayload
+      }
+    } catch (err) {
+      console.warn('[NetworkManager] HTTP category leaderboard fallback error:', err)
+    }
+    return null
+  }
+
+  public async submitLeaderboardRecord(request: LeaderboardSubmitRequest): Promise<LeaderboardSubmitResponse> {
+    if (!this.socket || !this.socket.connected) {
+      return { success: false, error: 'Sunucuya bağlı değil' }
+    }
+    return new Promise((resolve) => {
+      this.socket!.emit(SOCKET_EVENTS.LEADERBOARD_SUBMIT, request, (res: LeaderboardSubmitResponse) => {
+        resolve(res || { success: false, error: 'Cevap alınamadı' })
+      })
+      setTimeout(() => resolve({ success: false, error: 'Zaman aşımı' }), 4000)
+    })
   }
 }

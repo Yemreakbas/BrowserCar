@@ -15,6 +15,7 @@ import type {
   DriftLeaderboardPayload,
   DriftSessionFinishedPayload,
 } from '../../../shared/src/messages.ts'
+import type { LeaderboardManager } from '../leaderboard/LeaderboardManager.ts'
 
 export interface DrifterProgress {
   playerId: string
@@ -46,14 +47,20 @@ export interface ActiveDriftSession {
 
 export class OnlineDriftManager {
   private io: Server
+  private leaderboardManager?: LeaderboardManager
   private sessions = new Map<string, ActiveDriftSession>()
 
   // Standard drift session duration in seconds
   public static readonly DEFAULT_SESSION_DURATION = 60
   public static readonly COUNTDOWN_SECONDS = 3
 
-  constructor(io: Server) {
+  constructor(io: Server, leaderboardManager?: LeaderboardManager) {
     this.io = io
+    this.leaderboardManager = leaderboardManager
+  }
+
+  public setLeaderboardManager(lm: LeaderboardManager): void {
+    this.leaderboardManager = lm
   }
 
   public getOrCreateSession(room: RoomInfo): ActiveDriftSession {
@@ -275,6 +282,29 @@ export class OnlineDriftManager {
       if (validatedBank > drifter.bestDriftScore) {
         drifter.bestDriftScore = validatedBank
       }
+
+      if (this.leaderboardManager && validatedBank >= 50) {
+        this.leaderboardManager.recordRecord(
+          'best_drift_score',
+          drifter.playerId,
+          drifter.playerName,
+          'car-tuner',
+          'Drift Pilotu',
+          validatedBank
+        )
+      }
+
+      if (this.leaderboardManager && sub.comboMultiplier >= 1.5) {
+        this.leaderboardManager.recordRecord(
+          'best_drift_combo',
+          drifter.playerId,
+          drifter.playerName,
+          'car-tuner',
+          'Drift Pilotu',
+          sub.comboMultiplier
+        )
+      }
+
       drifter.currentPoints = 0
       drifter.comboMultiplier = 1.0
       drifter.isDrifting = false
@@ -337,6 +367,17 @@ export class OnlineDriftManager {
         }
         drifter.currentPoints = 0
         drifter.isDrifting = false
+      }
+
+      if (this.leaderboardManager && drifter.totalScore >= 50) {
+        this.leaderboardManager.recordRecord(
+          'best_drift_score',
+          drifter.playerId,
+          drifter.playerName,
+          'car-tuner',
+          'Drift Pilotu',
+          drifter.totalScore
+        )
       }
     }
 

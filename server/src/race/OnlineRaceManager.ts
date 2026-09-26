@@ -15,6 +15,7 @@ import type {
   RaceProgressPayload,
   RaceResultsPayload,
 } from '../../../shared/src/messages.ts'
+import type { LeaderboardManager } from '../leaderboard/LeaderboardManager.ts'
 
 export interface TrackCheckpointDef {
   id: number
@@ -61,6 +62,7 @@ export interface ActiveRaceSession {
 
 export class OnlineRaceManager {
   private io: Server
+  private leaderboardManager?: LeaderboardManager
   private sessions = new Map<string, ActiveRaceSession>()
 
   // Circuit Checkpoints centered at Z = 600 (matches RaceTrack.ts)
@@ -85,8 +87,13 @@ export class OnlineRaceManager {
     { index: 7, position: [-2.5, 0.45, 521], rotation: [0, 0, 0, 1] },
   ]
 
-  constructor(io: Server) {
+  constructor(io: Server, leaderboardManager?: LeaderboardManager) {
     this.io = io
+    this.leaderboardManager = leaderboardManager
+  }
+
+  public setLeaderboardManager(lm: LeaderboardManager): void {
+    this.leaderboardManager = lm
   }
 
   public getOrCreateSession(room: RoomInfo): ActiveRaceSession {
@@ -282,6 +289,18 @@ export class OnlineRaceManager {
 
       if (racer.bestLapTime === null || lapTime < racer.bestLapTime) {
         racer.bestLapTime = lapTime
+      }
+
+      if (this.leaderboardManager && lapTime >= 10.0) {
+        this.leaderboardManager.recordRecord(
+          'fastest_lap',
+          racer.playerId,
+          racer.playerName,
+          'car-sedan',
+          'Pist Yarışçısı',
+          lapTime,
+          'circuit'
+        )
       }
 
       if (racer.currentLap < session.totalLaps) {

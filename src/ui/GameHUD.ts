@@ -8,6 +8,7 @@ export interface GameHUDOptions {
   onAudioClick?: () => void
   onGarageClick?: () => void
   onProfileClick?: () => void
+  onLeaderboardsClick?: () => void
 }
 
 /**
@@ -33,6 +34,7 @@ export class GameHUD implements ModeHUDController {
   private audioBtnText: HTMLElement | null
   private btnGarage: HTMLElement | null
   private btnProfile: HTMLElement | null
+  private btnLeaderboards: HTMLElement | null
 
   // City Mode Card Elements
   private cityInfoCard: HTMLElement | null
@@ -87,6 +89,7 @@ export class GameHUD implements ModeHUDController {
     this.audioBtnText = document.getElementById('audio-btn-text')
     this.btnGarage = document.getElementById('btn-garage')
     this.btnProfile = document.getElementById('btn-profile')
+    this.btnLeaderboards = document.getElementById('btn-leaderboards')
 
     this.cityInfoCard = document.getElementById('city-info-card')
     this.citySpawnBadge = document.getElementById('city-spawn-badge')
@@ -138,6 +141,9 @@ export class GameHUD implements ModeHUDController {
     }
     if (options?.onProfileClick && this.btnProfile) {
       this.btnProfile.addEventListener('click', options.onProfileClick)
+    }
+    if (options?.onLeaderboardsClick && this.btnLeaderboards) {
+      this.btnLeaderboards.addEventListener('click', options.onLeaderboardsClick)
     }
   }
 
