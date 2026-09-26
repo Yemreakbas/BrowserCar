@@ -21,6 +21,12 @@ import { OnlineRaceState, OnlineDriftState } from '../shared/src/constants.ts'
 import type { RaceParticipantResult, DriftParticipantProgress } from '../shared/src/messages.ts'
 import { FollowCamera, type CameraPreset } from './camera/FollowCamera.ts'
 import { AudioManager } from './audio/AudioManager.ts'
+import {
+  VEHICLE_CATALOG,
+  getVehicleDefinition,
+  getSelectedVehicleId,
+  setSelectedVehicleId,
+} from './vehicle/VehicleDefinition.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -50,6 +56,11 @@ app.innerHTML = `
           </svg>
           <span id="menu-btn-text">Modlar</span>
           <span class="reset-key-hint">ESC</span>
+        </button>
+        <button id="btn-garage" class="reset-btn" type="button" title="Garaj ve Araç Seçimi (G)">
+          <span style="font-size: 13px;">🏎️</span>
+          <span>Garaj</span>
+          <span class="reset-key-hint">G</span>
         </button>
         <button id="btn-spawn" class="reset-btn" type="button" title="Başlangıç Konumunu Değiştir (C)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -318,11 +329,15 @@ app.innerHTML = `
         </button>
       </div>
 
-      <!-- Master Navigation Tabs: PLAY (SOLO) vs ONLINE (MULTIPLAYER) -->
+      <!-- Master Navigation Tabs: PLAY (SOLO) vs GARAGE (CARS) vs ONLINE (MULTIPLAYER) -->
       <div class="mp-master-tabs">
         <button id="main-nav-play" class="mp-master-tab-btn" type="button">
           <span>🎮</span>
-          <span>OYNA (SOLO MODLAR)</span>
+          <span>OYNA (MODLAR)</span>
+        </button>
+        <button id="main-nav-garage" class="mp-master-tab-btn" type="button">
+          <span>🏎️</span>
+          <span>GARAJ (ARAÇ SEÇİMİ)</span>
         </button>
         <button id="main-nav-online" class="mp-master-tab-btn active" type="button">
           <span>🌐</span>
@@ -336,6 +351,21 @@ app.innerHTML = `
           İstediğin oyun modunu seçip tek oyunculu antrenman ve meydan okumaya başla:
         </div>
         <div id="master-mode-grid" class="mode-grid">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Garage / Vehicle Selection View (Phase 23) -->
+      <div id="mp-garage-view" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 13px; color: #94a3b8; font-weight: 600;">
+            Kullanmak istediğin aracı seç; her aracın hızı, ivmelenmesi, ağırlığı ve yol tutuşu farklıdır:
+          </div>
+          <span id="garage-active-badge" class="badge-pill" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;">
+            Aktif: Apex GT Sedan
+          </span>
+        </div>
+        <div id="garage-car-grid" class="garage-car-grid">
           <!-- Rendered dynamically -->
         </div>
       </div>
@@ -586,6 +616,7 @@ const keyD = document.querySelector<HTMLDivElement>('#key-d')!
 const btnReset = document.querySelector<HTMLButtonElement>('#btn-reset')!
 const btnSpawn = document.querySelector<HTMLButtonElement>('#btn-spawn')!
 const btnMenu = document.querySelector<HTMLButtonElement>('#btn-menu')!
+const btnGarage = document.querySelector<HTMLButtonElement>('#btn-garage')!
 const btnAudio = document.querySelector<HTMLButtonElement>('#btn-audio')!
 const audioBtnIcon = document.querySelector<HTMLSpanElement>('#audio-btn-icon')!
 const audioBtnText = document.querySelector<HTMLSpanElement>('#audio-btn-text')!
@@ -693,8 +724,12 @@ const mpMemberList = document.querySelector<HTMLDivElement>('#mp-member-list')!
 
 // Phase 18 Lobby & Matchmaking Elements
 const mainNavPlay = document.querySelector<HTMLButtonElement>('#main-nav-play')!
+const mainNavGarage = document.querySelector<HTMLButtonElement>('#main-nav-garage')!
 const mainNavOnline = document.querySelector<HTMLButtonElement>('#main-nav-online')!
 const mpPlayView = document.querySelector<HTMLDivElement>('#mp-play-view')!
+const mpGarageView = document.querySelector<HTMLDivElement>('#mp-garage-view')!
+const garageActiveBadge = document.querySelector<HTMLSpanElement>('#garage-active-badge')!
+const garageCarGrid = document.querySelector<HTMLDivElement>('#garage-car-grid')!
 const masterModeGrid = document.querySelector<HTMLDivElement>('#master-mode-grid')!
 const mpOnlineView = document.querySelector<HTMLDivElement>('#mp-online-view')!
 const mpPingBadge = document.querySelector<HTMLDivElement>('#mp-ping-badge')!
@@ -824,11 +859,18 @@ async function bootstrap() {
   // 3. Build Dedicated Drift Arena & Slalom Playground (Centered at Z = -600, Phase 10)
   const driftTrack = new DriftTrack(scene, physicsWorld)
 
-  // 4. Build Physics Vehicle
-  const vehicle = new Vehicle(scene, physicsWorld, undefined, () => {
-    hudAssetStatus.textContent = 'Harita Hazır • 60 FPS'
-    hudAssetStatus.style.color = '#34d399'
-  })
+  // 4. Build Physics Vehicle (Phase 23 Car Selection)
+  const initialVehicleId = getSelectedVehicleId()
+  const vehicle = new Vehicle(
+    scene,
+    physicsWorld,
+    undefined,
+    () => {
+      hudAssetStatus.textContent = 'Harita Hazır • 60 FPS'
+      hudAssetStatus.style.color = '#34d399'
+    },
+    initialVehicleId
+  )
 
   // 5. Build Particle & Visual Effect Systems (Phase 9)
   const tireSmoke = new TireSmokeSystem(scene)
@@ -1141,10 +1183,116 @@ async function bootstrap() {
     },
   })
 
-  // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18)
+  // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18 & 23)
   let isModalOpen = false
   let isMpModalOpen = false
-  let activeMasterTab: 'play' | 'online' = 'online'
+  let activeMasterTab: 'play' | 'garage' | 'online' = 'online'
+
+  const renderGarageCars = () => {
+    const currentDef = vehicle.getActiveDefinition()
+    const currentId = currentDef.id
+    if (garageActiveBadge) {
+      garageActiveBadge.textContent = `Aktif: ${currentDef.name}`
+    }
+
+    if (!garageCarGrid) return
+
+    const categoryColors: Record<string, { bg: string; color: string; border: string }> = {
+      SPORTS: { bg: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: 'rgba(56, 189, 248, 0.4)' },
+      RACE: { bg: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: 'rgba(239, 68, 68, 0.4)' },
+      DRIFT: { bg: 'rgba(234, 179, 8, 0.15)', color: '#facc15', border: 'rgba(234, 179, 8, 0.4)' },
+      PROTOTYPE: { bg: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', border: 'rgba(168, 85, 247, 0.4)' },
+      POLICE: { bg: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: 'rgba(59, 130, 246, 0.4)' },
+      SUV: { bg: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: 'rgba(34, 197, 94, 0.4)' },
+    }
+
+    const html = VEHICLE_CATALOG.map((car) => {
+      const isSelected = car.id === currentId
+      const catStyle = categoryColors[car.category] || { bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.4)' }
+
+      const speedPct = Math.min(100, Math.round((car.stats.topSpeedKmh / 175) * 100))
+      const accelPct = Math.min(100, Math.round((car.stats.acceleration / 10) * 100))
+      const handlingPct = Math.min(100, Math.round((car.stats.handling / 10) * 100))
+      const driftPct = Math.min(100, Math.round((car.stats.driftMultiplier / 1.5) * 100))
+      const massPct = Math.min(100, Math.round((car.stats.massKg / 2200) * 100))
+
+      return `
+        <div class="garage-car-card ${isSelected ? 'active' : ''}" data-car-id="${car.id}">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+            <div>
+              <div style="font-weight: 800; font-size: 15px; color: #f8fafc; letter-spacing: -0.01em;">${car.name}</div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">${car.description}</div>
+            </div>
+            <span class="garage-card-badge" style="background: ${catStyle.bg}; color: ${catStyle.color}; border: 1px solid ${catStyle.border};">
+              ${car.badge}
+            </span>
+          </div>
+
+          <div class="garage-stats-grid">
+            <div class="garage-stat-row">
+              <span class="garage-stat-label">Maks Hız</span>
+              <div class="garage-stat-bar"><div class="garage-stat-fill" style="width: ${speedPct}%; background: linear-gradient(90deg, #38bdf8, #818cf8);"></div></div>
+              <span class="garage-stat-val">${car.stats.topSpeedKmh} km/h</span>
+            </div>
+            <div class="garage-stat-row">
+              <span class="garage-stat-label">İvmelenme</span>
+              <div class="garage-stat-bar"><div class="garage-stat-fill" style="width: ${accelPct}%; background: linear-gradient(90deg, #34d399, #10b981);"></div></div>
+              <span class="garage-stat-val">${car.stats.acceleration}/10</span>
+            </div>
+            <div class="garage-stat-row">
+              <span class="garage-stat-label">Yol Tutuş</span>
+              <div class="garage-stat-bar"><div class="garage-stat-fill" style="width: ${handlingPct}%; background: linear-gradient(90deg, #38bdf8, #0ea5e9);"></div></div>
+              <span class="garage-stat-val">${car.stats.handling}/10</span>
+            </div>
+            <div class="garage-stat-row">
+              <span class="garage-stat-label">Drift Çarpanı</span>
+              <div class="garage-stat-bar"><div class="garage-stat-fill" style="width: ${driftPct}%; background: linear-gradient(90deg, #f59e0b, #ef4444);"></div></div>
+              <span class="garage-stat-val">${car.stats.driftMultiplier}x</span>
+            </div>
+            <div class="garage-stat-row">
+              <span class="garage-stat-label">Kütle</span>
+              <div class="garage-stat-bar"><div class="garage-stat-fill" style="width: ${massPct}%; background: #64748b;"></div></div>
+              <span class="garage-stat-val">${car.stats.massKg} kg</span>
+            </div>
+          </div>
+
+          <button class="btn-select-car ${isSelected ? 'active' : ''}" data-car-id="${car.id}" type="button">
+            ${isSelected ? '✓ SEÇİLDİ (AKTİF)' : 'BU ARACI KULLAN'}
+          </button>
+        </div>
+      `
+    }).join('')
+
+    garageCarGrid.innerHTML = html
+
+    const selectVehicle = (carId: string) => {
+      if (carId === currentId) return
+      const def = getVehicleDefinition(carId)
+      if (def) {
+        audioManager.playClick()
+        setSelectedVehicleId(def.id)
+        vehicle.setDefinition(def, () => {
+          showResetToast(`🏎️ Araç Değiştirildi: ${def.name}`, 'info', 2200)
+        })
+        renderGarageCars()
+      }
+    }
+
+    garageCarGrid.querySelectorAll<HTMLButtonElement>('.btn-select-car').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const carId = btn.dataset.carId
+        if (carId) selectVehicle(carId)
+      })
+    })
+
+    garageCarGrid.querySelectorAll<HTMLDivElement>('.garage-car-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const carId = card.dataset.carId
+        if (carId) selectVehicle(carId)
+      })
+    })
+  }
 
   const renderModeCards = () => {
     const active = modeManager.getActiveMode()
@@ -1196,27 +1344,39 @@ async function bootstrap() {
     })
   }
 
-  const switchMasterTab = (tab: 'play' | 'online') => {
+  const switchMasterTab = (tab: 'play' | 'garage' | 'online') => {
     activeMasterTab = tab
+    mainNavPlay.classList.toggle('active', tab === 'play')
+    mainNavGarage.classList.toggle('active', tab === 'garage')
+    mainNavOnline.classList.toggle('active', tab === 'online')
+
+    mpPlayView.style.display = tab === 'play' ? 'block' : 'none'
+    mpGarageView.style.display = tab === 'garage' ? 'block' : 'none'
+    mpOnlineView.style.display = tab === 'online' ? 'flex' : 'none'
+
     if (tab === 'play') {
-      mainNavPlay.classList.add('active')
-      mainNavOnline.classList.remove('active')
-      mpPlayView.style.display = 'block'
-      mpOnlineView.style.display = 'none'
       renderModeCards()
-    } else {
-      mainNavOnline.classList.add('active')
-      mainNavPlay.classList.remove('active')
-      mpPlayView.style.display = 'none'
-      mpOnlineView.style.display = 'flex'
+    } else if (tab === 'garage') {
+      renderGarageCars()
+    } else if (tab === 'online') {
       networkManager.refreshRooms()
     }
   }
 
-  mainNavPlay.addEventListener('click', () => switchMasterTab('play'))
-  mainNavOnline.addEventListener('click', () => switchMasterTab('online'))
+  mainNavPlay.addEventListener('click', () => {
+    audioManager.playClick()
+    switchMasterTab('play')
+  })
+  mainNavGarage.addEventListener('click', () => {
+    audioManager.playClick()
+    switchMasterTab('garage')
+  })
+  mainNavOnline.addEventListener('click', () => {
+    audioManager.playClick()
+    switchMasterTab('online')
+  })
 
-  const openMasterModal = (tab: 'play' | 'online' = 'online') => {
+  const openMasterModal = (tab: 'play' | 'garage' | 'online' = 'online') => {
     isMpModalOpen = true
     isModalOpen = true
     mpModal.classList.add('open')
@@ -1237,6 +1397,11 @@ async function bootstrap() {
     else openMasterModal('play')
   }
 
+  const toggleGarageModal = () => {
+    if (isMpModalOpen && activeMasterTab === 'garage') closeMasterModal()
+    else openMasterModal('garage')
+  }
+
   const closeMpModal = () => closeMasterModal()
   const toggleMpModal = () => {
     if (isMpModalOpen && activeMasterTab === 'online') closeMasterModal()
@@ -1244,6 +1409,10 @@ async function bootstrap() {
   }
 
   btnMenu.addEventListener('click', toggleModal)
+  btnGarage.addEventListener('click', () => {
+    audioManager.playClick()
+    toggleGarageModal()
+  })
   modalClose.addEventListener('click', closeModal)
   modeModal.addEventListener('click', (e) => {
     if (e.target === modeModal) closeModal()
@@ -2055,6 +2224,9 @@ async function bootstrap() {
         showResetToast(`Kamera: ${presetLabels[nextPreset]}`, 'info', 1200)
         break
       }
+      case 'KeyG':
+        openMasterModal('garage')
+        break
     }
   })
 

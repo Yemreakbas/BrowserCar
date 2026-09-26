@@ -2,6 +2,11 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { PhysicsWorld } from '../physics/PhysicsWorld.ts'
 import { DEFAULT_VEHICLE_CONFIG, type VehicleConfig } from './VehicleConfig.ts'
+import {
+  DEFAULT_VEHICLE_ID,
+  getVehicleDefinition,
+  type VehicleDefinition,
+} from './VehicleDefinition.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 
 export interface VehicleInput {
@@ -20,6 +25,7 @@ export class Vehicle {
 
   // Centralized Vehicle Tuning Configuration
   public config: VehicleConfig
+  public activeDefinition: VehicleDefinition
 
   // Rapier Physics references
   public rigidBody!: RAPIER.RigidBody
@@ -55,10 +61,12 @@ export class Vehicle {
     scene: THREE.Scene,
     physicsWorld: PhysicsWorld,
     customConfig?: Partial<VehicleConfig>,
-    onLoaded?: () => void
+    onLoaded?: () => void,
+    initialDefinitionId?: string
   ) {
     this.physicsWorld = physicsWorld
-    this.config = { ...DEFAULT_VEHICLE_CONFIG, ...customConfig }
+    this.activeDefinition = getVehicleDefinition(initialDefinitionId || DEFAULT_VEHICLE_ID)
+    this.config = { ...DEFAULT_VEHICLE_CONFIG, ...this.activeDefinition.config, ...customConfig }
 
     this.root = new THREE.Group()
     this.root.name = 'PlayerVehicleRoot'
@@ -76,8 +84,8 @@ export class Vehicle {
     // 1. Initialize Rapier Rigid Body and Chassis Collider
     this.setupPhysicsBody()
 
-    // 2. Load real Kenney car model from public/assets/cars/sedan-sports.glb
-    this.loadKenneyCar('/assets/cars/sedan-sports.glb', onLoaded)
+    // 2. Load real Kenney car model from active definition
+    this.loadKenneyCar(this.activeDefinition.modelPath, onLoaded)
   }
 
   private setupPhysicsBody() {
@@ -190,6 +198,31 @@ export class Vehicle {
         console.error('Error loading Kenney vehicle asset from', assetPath, error)
       }
     )
+  }
+
+  /**
+   * Dynamically applies a new vehicle definition, tuning configuration, and swaps 3D model (Phase 23)
+   */
+  public setDefinition(def: VehicleDefinition, onLoaded?: () => void): void {
+    this.activeDefinition = def
+    this.config = { ...DEFAULT_VEHICLE_CONFIG, ...def.config }
+
+    if (this.carModel) {
+      this.bodyGroup.remove(this.carModel)
+      this.carModel = null
+      this.bodyMesh = null
+      this.wheelFrontLeft = null
+      this.wheelFrontRight = null
+      this.wheelBackLeft = null
+      this.wheelBackRight = null
+    }
+
+    this.isLoaded = false
+    this.loadKenneyCar(def.modelPath, onLoaded)
+  }
+
+  public getActiveDefinition(): VehicleDefinition {
+    return this.activeDefinition
   }
 
   public update(delta: number, keys: VehicleInput) {
