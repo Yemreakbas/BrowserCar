@@ -577,6 +577,21 @@ export class DriftTrack {
     return this.spawnPoints[safeIndex]
   }
 
+  public getNearestSpawnPoint(pos: THREE.Vector3): DriftTrackSpawnPoint {
+    let nearest = this.spawnPoints[0]
+    let minDistSq = Infinity
+    for (const pt of this.spawnPoints) {
+      const dx = pt.position.x - pos.x
+      const dz = pt.position.z - pos.z
+      const distSq = dx * dx + dz * dz
+      if (distSq < minDistSq) {
+        minDistSq = distSq
+        nearest = pt
+      }
+    }
+    return nearest
+  }
+
   public setVisible(visible: boolean): void {
     this.group.visible = visible
   }

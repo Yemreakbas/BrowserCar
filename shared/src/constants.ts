@@ -48,6 +48,7 @@ export const SOCKET_EVENTS = {
 
   // Player state & authoritative sync (Phase 13 & 14)
   PLAYER_STATE: 'player:state',
+  PLAYER_RESET: 'player:reset',
   ROOM_SNAPSHOT: 'room:snapshot',
   SERVER_RECONCILE: 'player:reconcile',
 

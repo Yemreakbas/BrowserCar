@@ -148,6 +148,20 @@ export interface ReconcilePayload {
   reason?: string
 }
 
+export interface PlayerResetRequest {
+  roomId: string
+  position: [number, number, number]
+  rotation: [number, number, number, number]
+  reason: 'manual' | 'fall' | 'flipped' | 'stuck'
+}
+
+export interface PlayerResetResponse {
+  success: boolean
+  position: [number, number, number]
+  rotation: [number, number, number, number]
+  reason?: string
+}
+
 // --- ONLINE RACE PAYLOADS (PHASE 16) ---
 
 export interface RaceRoomUpdatePayload {

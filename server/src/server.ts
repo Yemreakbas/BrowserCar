@@ -23,6 +23,9 @@ import type {
   RaceCheckpointPassRequest,
   DriftScoreSubmission,
   QuickJoinRequest,
+  PlayerResetRequest,
+  PlayerResetResponse,
+  AuthoritativePlayerState,
 } from '../../shared/src/messages.ts'
 import { PlayerManager } from './players/PlayerManager.ts'
 import { RoomManager } from './rooms/RoomManager.ts'
@@ -193,6 +196,86 @@ io.on('connection', socket => {
       socket.to(state.roomId).emit(SOCKET_EVENTS.PLAYER_STATE, result.state)
     } catch (err) {
       console.warn('[Multiplayer] Error handling player state update:', err)
+    }
+  })
+
+  // --- PLAYER: RESET / RESPAWN VALIDATION (PHASE 19) ---
+  socket.on(SOCKET_EVENTS.PLAYER_RESET, (data: PlayerResetRequest, callback?: (response: PlayerResetResponse) => void) => {
+    try {
+      const currentPlayer = playerManager.getPlayerBySocket(socket.id)
+      if (!currentPlayer || !data || !data.roomId) {
+        if (typeof callback === 'function') {
+          callback({ success: false, position: [0, 0.45, 0], rotation: [0, 0, 0, 1], reason: 'Geçersiz oyuncu veya oda' })
+        }
+        return
+      }
+
+      const room = roomManager.getRoom(data.roomId)
+      let targetPos: [number, number, number] = data.position ? [...data.position] : [0, 0.45, 0]
+      let targetRot: [number, number, number, number] = data.rotation ? [...data.rotation] : [0, 0, 0, 1]
+
+      // Legal mode coordinates verification
+      let isLegal = true
+      if (room?.mode === 'RACE') {
+        const distFromTrack = Math.hypot(targetPos[0], targetPos[2] - 600)
+        if (distFromTrack > 350 || targetPos[1] < -1.0 || targetPos[1] > 20) {
+          isLegal = false
+        }
+      } else if (room?.mode === 'DRIFT') {
+        const distFromDrift = Math.hypot(targetPos[0], targetPos[2] - (-600))
+        if (distFromDrift > 300 || targetPos[1] < -1.0 || targetPos[1] > 20) {
+          isLegal = false
+        }
+      } else {
+        if (Math.abs(targetPos[0]) > 300 || Math.abs(targetPos[2]) > 300 || targetPos[1] < -1.0 || targetPos[1] > 20) {
+          isLegal = false
+        }
+      }
+
+      if (!isLegal) {
+        targetPos = room?.mode === 'RACE' ? [2.5, 0.45, 570] : room?.mode === 'DRIFT' ? [0, 0.45, -600] : [0, 0.45, -25]
+        targetRot = [0, 0, 0, 1]
+      }
+
+      // Construct validated authoritative state
+      const authoritativeState: AuthoritativePlayerState = {
+        playerId: currentPlayer.id,
+        playerName: currentPlayer.name,
+        roomId: data.roomId,
+        position: targetPos,
+        rotation: targetRot,
+        velocity: [0, 0, 0],
+        speed: 0,
+        steering: 0,
+        isBraking: false,
+        isDrifting: false,
+        isRespawn: true,
+        lastProcessedSequence: 0,
+        timestamp: Date.now(),
+      }
+
+      // Update room state map
+      const roomStates = roomManager['playerStatesByRoom']?.get(data.roomId)
+      if (roomStates) {
+        roomStates.set(currentPlayer.id, authoritativeState)
+      }
+
+      // Broadcast respawn immediately to other clients in room
+      socket.to(data.roomId).emit(SOCKET_EVENTS.PLAYER_STATE, authoritativeState)
+
+      if (typeof callback === 'function') {
+        callback({
+          success: true,
+          position: targetPos,
+          rotation: targetRot,
+          reason: data.reason,
+        })
+      }
+    } catch (err) {
+      console.warn('[Multiplayer] Error handling player reset:', err)
+      if (typeof callback === 'function') {
+        callback({ success: false, position: [0, 0.45, 0], rotation: [0, 0, 0, 1], reason: 'Sunucu hatası' })
+      }
     }
   })
 

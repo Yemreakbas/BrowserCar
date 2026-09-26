@@ -1699,3 +1699,113 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Phase 19: Vehicle Reset & Respawn Alerts --- */
+#hud-reset-toast {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #f8fafc;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#hud-reset-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+#hud-reset-toast.info {
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+}
+
+#hud-reset-toast.warning {
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fef3c7;
+}
+
+#hud-reset-toast.alert {
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fee2e2;
+  box-shadow: 0 12px 36px rgba(239, 68, 68, 0.25);
+}
+
+#hud-reset-toast .toast-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+}
+
+#hud-action-hint {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  z-index: 95;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fbbf24;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.25);
+  animation: hint-pulse 1.4s infinite ease-in-out;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#hud-action-hint.active {
+  display: flex;
+  transform: translateX(-50%) translateY(0);
+}
+
+@keyframes hint-pulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1);
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.25);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.03);
+    box-shadow: 0 12px 32px rgba(245, 158, 11, 0.45);
+  }
+}
+
+.reset-screen-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(56, 189, 248, 0.18) 0%, rgba(15, 23, 42, 0.4) 100%);
+  opacity: 0;
+  transition: opacity 0.28s ease-out;
+}
+
+.reset-screen-flash.flash {
+  opacity: 1;
+}
+

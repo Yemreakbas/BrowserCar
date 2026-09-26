@@ -78,4 +78,7 @@ export interface IGameMode {
   onExit(context: ModeContext): void
   onReset(context: ModeContext): void
   cycleSpawn?(context: ModeContext): void
+  getRespawnPoint?(context: ModeContext): { position: THREE.Vector3; rotationY: number; name: string }
+  resetCombo?(): void
 }
+

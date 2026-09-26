@@ -48,6 +48,24 @@ export class CityWorld {
     },
   ]
 
+  /**
+   * Find the closest spawn point to a given coordinate for intelligent respawn.
+   */
+  public getNearestSpawnLocation(pos: THREE.Vector3): SpawnLocation {
+    let nearest = this.spawnLocations[0]
+    let minDistSq = Infinity
+    for (const loc of this.spawnLocations) {
+      const dx = loc.position.x - pos.x
+      const dz = loc.position.z - pos.z
+      const distSq = dx * dx + dz * dz
+      if (distSq < minDistSq) {
+        minDistSq = distSq
+        nearest = loc
+      }
+    }
+    return nearest
+  }
+
   // Shared Geometries and Materials for Trees & Props (Reused for Performance)
   private sharedMaterials = {
     trunk: new THREE.MeshStandardMaterial({ color: 0x4a3222, roughness: 0.9, metalness: 0.05 }),

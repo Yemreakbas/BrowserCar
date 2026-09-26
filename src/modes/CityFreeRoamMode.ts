@@ -57,6 +57,15 @@ export class CityFreeRoamMode implements IGameMode {
     this.applySpawn(context, this.currentSpawnIndex)
   }
 
+  public getRespawnPoint(context: ModeContext): { position: THREE.Vector3; rotationY: number; name: string } {
+    const loc = context.cityWorld.getNearestSpawnLocation(context.vehicle.root.position)
+    return {
+      position: loc.position.clone(),
+      rotationY: loc.rotationY,
+      name: loc.name,
+    }
+  }
+
   public cycleSpawn(context: ModeContext): void {
     const locations = context.cityWorld.spawnLocations
     this.currentSpawnIndex = (this.currentSpawnIndex + 1) % locations.length

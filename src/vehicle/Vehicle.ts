@@ -402,7 +402,7 @@ export class Vehicle {
     }
   }
 
-  public reset(spawnX: number = 0, spawnZ: number = 0, rotationY: number = 0) {
+  public reset(spawnX: number = 0, spawnZ: number = 0, rotationY: number = 0, spawnY: number = 0.45) {
     if (!this.rigidBody) return
 
     this.currentSpeed = 0
@@ -422,14 +422,16 @@ export class Vehicle {
     const qY = Math.sin(halfRot)
     const qW = Math.cos(halfRot)
 
+    const yPos = Math.max(0.45, spawnY)
+
     // Reset physics body state
-    this.rigidBody.setTranslation({ x: spawnX, y: 0.45, z: spawnZ }, true)
+    this.rigidBody.setTranslation({ x: spawnX, y: yPos, z: spawnZ }, true)
     this.rigidBody.setRotation({ x: 0, y: qY, z: 0, w: qW }, true)
     this.rigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true)
     this.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
 
     // Reset Three.js transforms
-    this.root.position.set(spawnX, 0.02, spawnZ)
+    this.root.position.set(spawnX, yPos - 0.43, spawnZ)
     this.root.rotation.set(0, rotationY, 0)
     this.bodyGroup.rotation.set(0, 0, 0)
 

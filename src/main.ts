@@ -16,6 +16,7 @@ import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
 import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
 import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
+import { VehicleResetSystem } from './vehicle/VehicleResetSystem.ts'
 import { OnlineRaceState, OnlineDriftState } from '../shared/src/constants.ts'
 import type { RaceParticipantResult, DriftParticipantProgress } from '../shared/src/messages.ts'
 
@@ -66,6 +67,18 @@ app.innerHTML = `
         </button>
       </div>
     </header>
+
+    <!-- Vehicle Reset Alert Toast & Action Hint (Phase 19) -->
+    <div id="hud-reset-toast">
+      <span id="hud-reset-icon" class="toast-icon">🔄</span>
+      <span id="hud-reset-text">Araç Sıfırlandı</span>
+    </div>
+
+    <div id="hud-action-hint">
+      <span id="hud-action-hint-text">⚠️ Araç Ters Döndü! [R] ile Düzelt</span>
+    </div>
+
+    <div id="reset-screen-flash" class="reset-screen-flash"></div>
 
     <!-- Online City Player List Overlay (Phase 15) -->
     <div id="city-player-list-card" class="city-player-list-card" style="display: none;">
@@ -666,6 +679,47 @@ const playerListCountBadge = document.querySelector<HTMLSpanElement>('#player-li
 const playerListItems = document.querySelector<HTMLDivElement>('#player-list-items')!
 const playerListPing = document.querySelector<HTMLSpanElement>('#player-list-ping')!
 
+// Vehicle Reset & Respawn Alerts (Phase 19)
+const hudResetToast = document.querySelector<HTMLDivElement>('#hud-reset-toast')!
+const hudResetIcon = document.querySelector<HTMLSpanElement>('#hud-reset-icon')!
+const hudResetText = document.querySelector<HTMLSpanElement>('#hud-reset-text')!
+const hudActionHint = document.querySelector<HTMLDivElement>('#hud-action-hint')!
+const hudActionHintText = document.querySelector<HTMLSpanElement>('#hud-action-hint-text')!
+const resetScreenFlash = document.querySelector<HTMLDivElement>('#reset-screen-flash')!
+
+let toastTimeout: number | null = null
+const showResetToast = (message: string, type: 'info' | 'warning' | 'alert' = 'info', durationMs: number = 2200) => {
+  if (toastTimeout !== null) {
+    window.clearTimeout(toastTimeout)
+    toastTimeout = null
+  }
+  hudResetToast.className = `show ${type}`
+  hudResetText.textContent = message
+  hudResetIcon.textContent = type === 'alert' ? '🚨' : type === 'warning' ? '⚠️' : '🔄'
+
+  toastTimeout = window.setTimeout(() => {
+    hudResetToast.classList.remove('show')
+    toastTimeout = null
+  }, durationMs)
+}
+
+const setActionHint = (hint: string | null) => {
+  if (hint) {
+    hudActionHintText.textContent = hint
+    hudActionHint.classList.add('active')
+  } else {
+    hudActionHint.classList.remove('active')
+  }
+}
+
+const triggerScreenFlash = () => {
+  if (!resetScreenFlash) return
+  resetScreenFlash.classList.add('flash')
+  setTimeout(() => {
+    resetScreenFlash.classList.remove('flash')
+  }, 280)
+}
+
 // --- 2. THREE.JS SCENE SETUP ---
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x93c5fd)
@@ -976,6 +1030,21 @@ async function bootstrap() {
     hud: modeHud,
     tireSmoke,
     networkManager,
+  })
+
+  // 8b. Initialize Vehicle Reset & Respawn System (Phase 19)
+  const vehicleResetSystem = new VehicleResetSystem({
+    vehicle,
+    modeManager,
+    networkManager,
+    tireSmoke,
+    onNotice: (msg, type, duration) => {
+      showResetToast(msg, type, duration)
+      triggerScreenFlash()
+    },
+    onHint: (hint) => {
+      setActionHint(hint)
+    },
   })
 
   // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18)
@@ -1391,14 +1460,9 @@ async function bootstrap() {
     }
   })
 
-  // 8.1 Online City Free Roam Synchronized Respawn & Spawning (Phase 15)
+  // 8.1 Mode-Aware Vehicle Respawn & Fall Recovery (Phase 19)
   const doRespawn = () => {
-    modeManager.reset()
-    if (vehicle && vehicle.rigidBody) {
-      const p = vehicle.root.position
-      const q = vehicle.root.quaternion
-      networkManager.sendRespawn([p.x, p.y, p.z], [q.x, q.y, q.z, q.w])
-    }
+    vehicleResetSystem.respawn('manual')
   }
 
   const doCycleSpawn = () => {
@@ -1942,6 +2006,9 @@ async function bootstrap() {
 
     // 9.2 Vehicle Dynamics Update
     vehicle.update(delta, keys)
+
+    // 9.2b Vehicle Reset & Out-Of-Bounds Fall / Flip Monitor (Phase 19)
+    vehicleResetSystem.update(delta, keys)
 
     // 9.3 Active Game Mode Update
     modeManager.update(delta)

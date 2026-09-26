@@ -226,6 +226,13 @@ export class RemoteVehicle {
     this.isBraking = !!state.isBraking
     this.isDrifting = !!state.isDrifting
 
+    // Instant snapping on respawn to avoid lerping across the map (Phase 19)
+    if ((state as any).isRespawn) {
+      this.root.position.copy(this.targetPosition)
+      this.root.quaternion.copy(this.targetQuaternion)
+      this.targetVelocity.set(0, 0, 0)
+    }
+
     if (state.playerName && state.playerName !== this.playerName) {
       this.playerName = state.playerName
       if (this.nameplateSprite) {

@@ -355,7 +355,35 @@ export class RaceMode implements IGameMode {
     context.hud.setSubtitle('Yarış Yenilendi • Tekrar Hazır Ol', this.badgeColor)
   }
 
+  public getRespawnPoint(context: ModeContext): { position: THREE.Vector3; rotationY: number; name: string } {
+    const checkpoints = context.raceTrack.checkpoints
+    if (!checkpoints || checkpoints.length === 0) {
+      const pole = context.raceTrack.getPolePosition()
+      return { position: pole.position.clone(), rotationY: pole.rotationY, name: pole.name }
+    }
+
+    // If on Lap 1 before crossing checkpoint 1
+    if (this.raceSystem.currentLap === 1 && this.raceSystem.nextCheckpointIndex === 1) {
+      if (this.isOnlineSession) {
+        const slot = RaceMode.GRID_POSITIONS[this.assignedGridIndex % RaceMode.GRID_POSITIONS.length]
+        return {
+          position: new THREE.Vector3(slot.x, 0.45, slot.z),
+          rotationY: slot.rotY,
+          name: `Başlangıç Grid #${this.assignedGridIndex + 1}`,
+        }
+      }
+      const pole = context.raceTrack.getPolePosition()
+      return { position: pole.position.clone(), rotationY: pole.rotationY, name: pole.name }
+    }
+
+    // Last passed checkpoint
+    const totalCp = checkpoints.length
+    const lastCpIndex = (this.raceSystem.nextCheckpointIndex - 1 + totalCp) % totalCp
+    return context.raceTrack.getCheckpointRespawn(lastCpIndex)
+  }
+
   public getRaceSystem(): RaceSystem {
     return this.raceSystem
   }
 }
+

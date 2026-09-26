@@ -367,7 +367,21 @@ export class DriftMode implements IGameMode {
     )
   }
 
+  public getRespawnPoint(context: ModeContext): { position: THREE.Vector3; rotationY: number; name: string } {
+    const pt = context.driftTrack.getNearestSpawnPoint(context.vehicle.root.position)
+    return {
+      position: pt.position.clone(),
+      rotationY: pt.rotationY,
+      name: pt.name,
+    }
+  }
+
+  public resetCombo(): void {
+    this.driftSystem.reset()
+  }
+
   public getDriftSystem(): DriftSystem {
     return this.driftSystem
   }
 }
+

@@ -290,22 +290,60 @@ export class RoomManager {
     let needsCorrection = false
     let correctionReason: string | undefined = undefined
 
-    // 1. Playable World Bounds Check (Prevent falling out of world or extreme NaN/teleports)
+    const room = this.rooms.get(state.roomId)
+
+    // 1. Playable World Bounds & Out-of-Bounds Detection (Phase 19)
+    // If car falls below road level (y < -5.0) or exceeds map boundaries, trigger authoritative recovery
     if (
-      validatedPos[1] < -25 ||
+      validatedPos[1] < -5.0 ||
       validatedPos[1] > 200 ||
-      Math.abs(validatedPos[0]) > 1500 ||
-      Math.abs(validatedPos[2]) > 1500
+      Math.abs(validatedPos[0]) > 1000 ||
+      Math.abs(validatedPos[2]) > 1000
     ) {
-      validatedPos = [0, 0.45, 0]
-      validatedRot = [0, 0, 0, 1]
+      // Authoritative fall recovery position based on mode
+      if (room?.mode === 'RACE') {
+        validatedPos = [2.5, 0.45, 570]
+        validatedRot = [0, 0, 0, 1]
+      } else if (room?.mode === 'DRIFT') {
+        validatedPos = [0, 0.45, -600]
+        validatedRot = [0, 0, 0, 1]
+      } else {
+        validatedPos = [0, 0.45, -25]
+        validatedRot = [0, 0, 0, 1]
+      }
       validatedVel = [0, 0, 0]
       needsCorrection = true
-      correctionReason = 'OUT_OF_BOUNDS'
+      correctionReason = 'OUT_OF_BOUNDS_FALL'
     } else if (state.isRespawn) {
-      // 2. Synchronized Respawn / Spawn Cycling: Accept position without displacement penalty
-      needsCorrection = false
-      correctionReason = undefined
+      // 2. Mode-Aware Respawn Validation (Phase 19)
+      let isLegal = true
+      if (room?.mode === 'RACE') {
+        const distFromTrack = Math.hypot(validatedPos[0], validatedPos[2] - 600)
+        if (distFromTrack > 300 || validatedPos[1] < -0.5 || validatedPos[1] > 15) {
+          isLegal = false
+        }
+      } else if (room?.mode === 'DRIFT') {
+        const distFromDrift = Math.hypot(validatedPos[0], validatedPos[2] - (-600))
+        if (distFromDrift > 250 || validatedPos[1] < -0.5 || validatedPos[1] > 15) {
+          isLegal = false
+        }
+      } else {
+        if (Math.abs(validatedPos[0]) > 250 || Math.abs(validatedPos[2]) > 250 || validatedPos[1] < -0.5 || validatedPos[1] > 15) {
+          isLegal = false
+        }
+      }
+
+      if (isLegal) {
+        validatedVel = [0, 0, 0]
+        needsCorrection = false
+        correctionReason = undefined
+      } else {
+        validatedPos = room?.mode === 'RACE' ? [2.5, 0.45, 570] : room?.mode === 'DRIFT' ? [0, 0.45, -600] : [0, 0.45, -25]
+        validatedRot = [0, 0, 0, 1]
+        validatedVel = [0, 0, 0]
+        needsCorrection = true
+        correctionReason = 'ILLEGAL_RESPAWN_POSITION'
+      }
     } else if (prev) {
       // 3. Displacement & Speed Sanity Check
       const dt = Math.max(0.01, (state.timestamp - prev.timestamp) / 1000)

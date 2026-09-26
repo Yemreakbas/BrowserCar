@@ -27,6 +27,8 @@ import type {
   DriftLeaderboardPayload,
   DriftSessionFinishedPayload,
   QuickJoinRequest,
+  PlayerResetRequest,
+  PlayerResetResponse,
 } from '../../shared/src/messages.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -394,6 +396,36 @@ export class NetworkManager {
         right: false,
         handbrake: false,
       },
+    })
+  }
+
+  /**
+   * Send an explicit player reset event with reason (manual, fall, flipped, stuck) to the server (Phase 19).
+   */
+  public sendPlayerReset(
+    position: [number, number, number],
+    rotation: [number, number, number, number],
+    reason: 'manual' | 'fall' | 'flipped' | 'stuck' = 'manual'
+  ): Promise<PlayerResetResponse | null> {
+    return new Promise((resolve) => {
+      // Always broadcast local respawn state immediately to other clients
+      this.sendRespawn(position, rotation)
+
+      if (!this.socket || !this.socket.connected || !this.currentRoom) {
+        resolve(null)
+        return
+      }
+
+      const req: PlayerResetRequest = {
+        roomId: this.currentRoom.id,
+        position,
+        rotation,
+        reason,
+      }
+
+      this.socket.emit(SOCKET_EVENTS.PLAYER_RESET, req, (res?: PlayerResetResponse) => {
+        resolve(res || null)
+      })
     })
   }
 

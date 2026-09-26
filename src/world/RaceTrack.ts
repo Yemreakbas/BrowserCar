@@ -603,6 +603,24 @@ export class RaceTrack {
     return this.spawnPoints[0]
   }
 
+  /**
+   * Get respawn position and forward orientation for a given checkpoint index.
+   */
+  public getCheckpointRespawn(checkpointIndex: number): { position: THREE.Vector3; rotationY: number; name: string } {
+    if (!this.checkpoints || this.checkpoints.length === 0) {
+      const pole = this.getPolePosition()
+      return { position: pole.position.clone(), rotationY: pole.rotationY, name: pole.name }
+    }
+    const idx = ((checkpointIndex % this.checkpoints.length) + this.checkpoints.length) % this.checkpoints.length
+    const cp = this.checkpoints[idx]
+    const rotY = Math.atan2(cp.forward.x, cp.forward.z)
+    return {
+      position: cp.position.clone(),
+      rotationY: rotY,
+      name: cp.name,
+    }
+  }
+
   public setVisible(visible: boolean) {
     this.group.visible = visible
   }
