@@ -421,6 +421,14 @@ export class LeaderboardManager {
     }
     this.lastSubmissionByPlayer.set(playerId, now)
 
+    // Bound memory: prune timestamps older than 10 minutes when map grows
+    if (this.lastSubmissionByPlayer.size > 300) {
+      const cutoff = now - 600000
+      for (const [pId, time] of this.lastSubmissionByPlayer.entries()) {
+        if (time < cutoff) this.lastSubmissionByPlayer.delete(pId)
+      }
+    }
+
     const res = this.recordRecord(
       data.category,
       playerId,

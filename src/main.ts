@@ -46,7 +46,7 @@ app.innerHTML = `
         <span id="hud-asset-status" class="brand-subtitle">Mod Yükleniyor...</span>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
-        <div id="hud-fps-badge" class="brand-badge" style="font-family: monospace; font-size: 13px; font-weight: 700; color: #34d399; letter-spacing: 0.5px; padding: 6px 12px;">
+        <div id="hud-fps-badge" class="brand-badge" style="font-family: monospace; font-size: 13px; font-weight: 700; color: #34d399; letter-spacing: 0.5px; padding: 6px 12px; cursor: pointer; user-select: none;" title="Performans İstatistikleri (F3 veya tıkla)">
           -- FPS
         </div>
         <button id="btn-multiplayer" class="reset-btn" type="button" title="Çok Oyunculu Lobi (Multiplayer)">
@@ -1045,7 +1045,7 @@ const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  400 // Optimized far plane: well past max fog distance (260m), saving depth precision & culling overhead
 )
 
 // --- 4. RENDERER & PERFORMANCE OPTIMIZATIONS ---
@@ -1076,12 +1076,13 @@ sunLight.castShadow = true
 sunLight.shadow.mapSize.width = 1024
 sunLight.shadow.mapSize.height = 1024
 sunLight.shadow.camera.near = 1.0
-sunLight.shadow.camera.far = 160
-sunLight.shadow.camera.left = -30
-sunLight.shadow.camera.right = 30
-sunLight.shadow.camera.top = 30
-sunLight.shadow.camera.bottom = -30
-sunLight.shadow.bias = -0.0006
+sunLight.shadow.camera.far = 140
+sunLight.shadow.camera.left = -24
+sunLight.shadow.camera.right = 24
+sunLight.shadow.camera.top = 24
+sunLight.shadow.camera.bottom = -24
+sunLight.shadow.bias = -0.0005
+sunLight.shadow.normalBias = 0.02
 scene.add(sunLight)
 scene.add(sunLight.target)
 
@@ -2792,6 +2793,10 @@ async function bootstrap() {
       case 'KeyL':
         toggleLeaderboardsModal()
         break
+      case 'F3':
+        e.preventDefault()
+        toggleDetailedStats()
+        break
     }
   })
 
@@ -2843,9 +2848,15 @@ async function bootstrap() {
     openMasterModal('online')
   })
 
-  // --- 8. PERFORMANCE & FPS MONITOR ---
+  // --- 8. PERFORMANCE & FPS MONITOR (PHASE 26) ---
   let frameCount = 0
   let lastFpsUpdateTime = performance.now()
+  let showDetailedStats = false
+  const toggleDetailedStats = () => {
+    showDetailedStats = !showDetailedStats
+    showResetToast(showDetailedStats ? 'Performans Paneli: AÇIK' : 'Performans Paneli: KAPALI', 'info', 1000)
+  }
+  hudFpsBadge.addEventListener('click', toggleDetailedStats)
 
   // --- 9. MAIN ANIMATION & PHYSICS LOOP ---
   let lastTime = performance.now()
@@ -2854,6 +2865,7 @@ async function bootstrap() {
   let profileStatsTimer = 0
   let accumulatedDistanceMeters = 0
   let lastTopSpeedSubmitTime = 0
+  const lastShadowPos = new THREE.Vector3(-9999, -9999, -9999)
 
   function animate() {
     requestAnimationFrame(animate)
@@ -2959,14 +2971,15 @@ async function bootstrap() {
       }
     }
 
-    // 9.5 Directional Sunlight Cascade (follows vehicle for sharp local shadows)
-    sunLight.position.set(
-      vehicle.root.position.x + 40,
-      60,
-      vehicle.root.position.z + 30
-    )
-    sunLight.target.position.copy(vehicle.root.position)
-    sunLight.target.updateMatrixWorld()
+    // 9.5 Directional Sunlight Cascade (follows vehicle for sharp local shadows, throttled when car moves)
+    const carPos = vehicle.root.position
+    const shadowDistSq = carPos.distanceToSquared(lastShadowPos)
+    if (shadowDistSq > 0.02) {
+      lastShadowPos.copy(carPos)
+      sunLight.position.set(carPos.x + 40, 60, carPos.z + 30)
+      sunLight.target.position.copy(carPos)
+      sunLight.target.updateMatrixWorld()
+    }
 
     // 9.5 Polished Third-Person Follow Camera (Phase 20)
     followCamera.update(delta)
@@ -2988,11 +3001,25 @@ async function bootstrap() {
       hudGear.className = 'gear-badge reverse'
     }
 
-    // 9.7 FPS Monitor Update
+    // 9.7 FPS & Performance Monitor Update (Phase 26)
     frameCount++
     if (now - lastFpsUpdateTime >= 500) {
       const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdateTime))
-      hudFpsBadge.textContent = `${fps} FPS`
+      const drawCalls = renderer.info.render.calls
+      const tris = renderer.info.render.triangles
+      const trisFormatted = tris >= 1000 ? `${Math.round(tris / 1000)}k` : `${tris}`
+      const geos = renderer.info.memory.geometries
+      const texs = renderer.info.memory.textures
+      const ping = networkManager.getPing()
+
+      if (showDetailedStats) {
+        hudFpsBadge.textContent = `${fps} FPS • ${drawCalls} DC • ${trisFormatted} Δ • ${ping}ms`
+      } else {
+        hudFpsBadge.textContent = `${fps} FPS`
+      }
+
+      hudFpsBadge.title = `FPS: ${fps} | Çizim Çağrısı (Draw Calls): ${drawCalls} | Üçgen (Triangles): ${tris.toLocaleString()} | Geometri: ${geos} | Doku: ${texs} | Gecikme: ${ping}ms (F3 veya tıkla)`
+
       if (fps >= 55) {
         hudFpsBadge.style.color = '#34d399'
       } else if (fps >= 35) {

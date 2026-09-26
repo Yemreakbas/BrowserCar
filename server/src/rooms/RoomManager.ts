@@ -11,6 +11,7 @@ import type {
 export class RoomManager {
   private rooms = new Map<string, RoomInfo>()
   private playerStatesByRoom = new Map<string, Map<string, AuthoritativePlayerState>>()
+  private roomDirtyFlags = new Map<string, boolean>()
 
   constructor() {
     this.initDefaultRooms()
@@ -103,6 +104,7 @@ export class RoomManager {
 
     this.rooms.set(roomId, room)
     this.playerStatesByRoom.set(roomId, new Map())
+    this.markRoomDirty(roomId)
     return room
   }
 
@@ -202,6 +204,7 @@ export class RoomManager {
       this.playerStatesByRoom.set(roomId, new Map())
     }
 
+    this.markRoomDirty(roomId)
     return { success: true, room, player: updatedPlayer }
   }
 
@@ -224,6 +227,8 @@ export class RoomManager {
       roomStates.delete(playerId)
     }
 
+    this.markRoomDirty(roomId)
+
     if (room.players.length === 0) {
       if (roomId === DEFAULT_GLOBAL_ROOM_ID || roomId === DEFAULT_RACE_ROOM_ID || roomId === DEFAULT_DRIFT_ROOM_ID) {
         room.hostId = 'system'
@@ -231,6 +236,7 @@ export class RoomManager {
       }
       this.rooms.delete(roomId)
       this.playerStatesByRoom.delete(roomId)
+      this.roomDirtyFlags.delete(roomId)
       return { left: true, roomDeleted: true }
     }
 
@@ -383,6 +389,7 @@ export class RoomManager {
     }
 
     roomStates.set(state.playerId, authState)
+    this.markRoomDirty(state.roomId)
 
     return {
       valid: true,
@@ -390,6 +397,18 @@ export class RoomManager {
       needsCorrection,
       correctionReason,
     }
+  }
+
+  public markRoomDirty(roomId: string): void {
+    this.roomDirtyFlags.set(roomId, true)
+  }
+
+  public isRoomDirty(roomId: string): boolean {
+    return this.roomDirtyFlags.get(roomId) ?? true
+  }
+
+  public clearRoomDirty(roomId: string): void {
+    this.roomDirtyFlags.set(roomId, false)
   }
 
   /**

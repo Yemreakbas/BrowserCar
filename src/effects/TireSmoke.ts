@@ -118,4 +118,23 @@ export class TireSmokeSystem {
       this.reset()
     }
   }
+
+  public dispose(): void {
+    this.reset()
+    if (this.group.parent) {
+      this.group.parent.remove(this.group)
+    }
+    if (this.geometry) {
+      this.geometry.dispose()
+    }
+    if (this.material) {
+      this.material.dispose()
+    }
+    for (const p of this.particles) {
+      if (p.mesh.material) {
+        ;(p.mesh.material as THREE.Material).dispose()
+      }
+    }
+    this.particles = []
+  }
 }

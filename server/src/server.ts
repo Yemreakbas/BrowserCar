@@ -128,8 +128,13 @@ if (defaultDriftRoom) {
   onlineDriftManager.getOrCreateSession(defaultDriftRoom)
 }
 
+let roomListBroadcastTimer: NodeJS.Timeout | null = null
 function broadcastRoomList() {
-  io.emit(SOCKET_EVENTS.ROOM_LIST_RESPONSE, roomManager.getAllRooms())
+  if (roomListBroadcastTimer) return
+  roomListBroadcastTimer = setTimeout(() => {
+    roomListBroadcastTimer = null
+    io.emit(SOCKET_EVENTS.ROOM_LIST_RESPONSE, roomManager.getAllRooms())
+  }, 100)
 }
 
 // 3. Authoritative Server Tick Loop (20 Hz = every 50ms)
@@ -139,9 +144,14 @@ setInterval(() => {
 
   for (const room of rooms) {
     if (room.currentPlayers > 0) {
-      const snapshot = roomManager.getRoomSnapshot(room.id, currentServerTick)
-      if (snapshot && snapshot.states.length > 0) {
-        io.to(room.id).emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot)
+      const isDirty = roomManager.isRoomDirty(room.id)
+      // Broadcast snapshot immediately at 20Hz if room is active/dirty, or send heartbeat at 2Hz (every 10 ticks = 500ms)
+      if (isDirty || currentServerTick % 10 === 0) {
+        const snapshot = roomManager.getRoomSnapshot(room.id, currentServerTick)
+        if (snapshot && snapshot.states.length > 0) {
+          io.to(room.id).emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot)
+        }
+        roomManager.clearRoomDirty(room.id)
       }
     }
   }

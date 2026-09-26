@@ -136,8 +136,19 @@ export class OnlineRaceManager {
 
     session.racers.delete(playerId)
 
-    // Recheck start condition if in lobby
-    if (session.state === OnlineRaceState.LOBBY) {
+    // Clean up timers and reset state if all racers leave
+    if (session.racers.size === 0) {
+      if (session.countdownTimer) {
+        clearInterval(session.countdownTimer)
+        session.countdownTimer = undefined
+      }
+      if (session.finishGraceTimer) {
+        clearTimeout(session.finishGraceTimer)
+        session.finishGraceTimer = undefined
+      }
+      session.state = OnlineRaceState.LOBBY
+      room.raceState = OnlineRaceState.LOBBY
+    } else if (session.state === OnlineRaceState.LOBBY) {
       this.checkStartCondition(room)
     } else if (session.state === OnlineRaceState.RACING) {
       // Check if all remaining racers finished

@@ -146,70 +146,109 @@ export class RemoteVehicle {
     this.root.add(this.nameplateSprite)
   }
 
-  private loadKenneyModel(assetPath: string) {
-    const loadingManager = new THREE.LoadingManager()
-    loadingManager.setURLModifier(url => {
-      if (url.includes('colormap.png')) {
-        return '/assets/cars/Textures/colormap.png'
-      }
-      return url
-    })
-    const loader = new GLTFLoader(loadingManager)
+  // Shared model cache across all remote vehicles to avoid redundant network & parsing hitching
+  private static gltfCache: Map<string, THREE.Group> = new Map()
+  private static loadingPromises: Map<string, Promise<THREE.Group>> = new Map()
 
-    loader.load(
-      assetPath,
-      gltf => {
-        if (this.placeholderMesh) {
-          this.root.remove(this.placeholderMesh)
-          this.placeholderMesh = null
+  /**
+   * Load GLTF template once and clone hierarchy for remote vehicle instances.
+   */
+  public static async loadCachedModel(assetPath: string): Promise<THREE.Group> {
+    const cached = RemoteVehicle.gltfCache.get(assetPath)
+    if (cached) {
+      return cached.clone(true)
+    }
+
+    const pending = RemoteVehicle.loadingPromises.get(assetPath)
+    if (pending) {
+      const template = await pending
+      return template.clone(true)
+    }
+
+    const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
+      const loadingManager = new THREE.LoadingManager()
+      loadingManager.setURLModifier(url => {
+        if (url.includes('colormap.png')) {
+          return '/assets/cars/Textures/colormap.png'
         }
+        return url
+      })
+      const loader = new GLTFLoader(loadingManager)
+      loader.load(
+        assetPath,
+        gltf => {
+          RemoteVehicle.gltfCache.set(assetPath, gltf.scene)
+          RemoteVehicle.loadingPromises.delete(assetPath)
+          resolve(gltf.scene)
+        },
+        undefined,
+        err => {
+          RemoteVehicle.loadingPromises.delete(assetPath)
+          reject(err)
+        }
+      )
+    })
 
-        this.carModel = gltf.scene
-        this.carModel.name = `KenneySedanSports_${this.playerId}`
+    RemoteVehicle.loadingPromises.set(assetPath, loadPromise)
+    const template = await loadPromise
+    return template.clone(true)
+  }
 
-        const scale = 1.45
-        this.carModel.scale.set(scale, scale, scale)
-        this.carModel.position.set(0, 0.02, 0)
+  private async loadKenneyModel(assetPath: string) {
+    try {
+      const clonedModel = await RemoteVehicle.loadCachedModel(assetPath)
 
-        this.carModel.traverse(child => {
-          if ((child as THREE.Mesh).isMesh) {
-            child.castShadow = true
-            child.receiveShadow = true
+      // Guard if vehicle was destroyed while loading
+      if (!this.root.parent) return
 
-            const mesh = child as THREE.Mesh
-            if (mesh.material) {
-              const mat = (mesh.material as THREE.Material).clone() as THREE.MeshStandardMaterial
-              mesh.material = mat
+      if (this.placeholderMesh) {
+        this.root.remove(this.placeholderMesh)
+        this.placeholderMesh = null
+      }
 
-              // Subtle custom tint for the remote car body
-              if (child.name === 'body') {
-                mat.color.setHex(this.carColor)
-                mat.roughness = 0.3
-                mat.metalness = 0.2
-              }
+      this.carModel = clonedModel
+      this.carModel.name = `KenneySedanSports_${this.playerId}`
+
+      const scale = 1.45
+      this.carModel.scale.set(scale, scale, scale)
+      this.carModel.position.set(0, 0.02, 0)
+
+      this.carModel.traverse(child => {
+        if ((child as THREE.Mesh).isMesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+
+          const mesh = child as THREE.Mesh
+          if (mesh.material) {
+            const mat = (mesh.material as THREE.Material).clone() as THREE.MeshStandardMaterial
+            mesh.material = mat
+
+            // Subtle custom tint for the remote car body
+            if (child.name === 'body') {
+              mat.color.setHex(this.carColor)
+              mat.roughness = 0.3
+              mat.metalness = 0.2
             }
           }
+        }
 
-          if (child.name === 'wheel-front-left') {
-            this.wheelFrontLeft = child
-            this.wheelFrontLeft.rotation.order = 'YXZ'
-          } else if (child.name === 'wheel-front-right') {
-            this.wheelFrontRight = child
-            this.wheelFrontRight.rotation.order = 'YXZ'
-          } else if (child.name === 'wheel-back-left') {
-            this.wheelBackLeft = child
-          } else if (child.name === 'wheel-back-right') {
-            this.wheelBackRight = child
-          }
-        })
+        if (child.name === 'wheel-front-left') {
+          this.wheelFrontLeft = child
+          this.wheelFrontLeft.rotation.order = 'YXZ'
+        } else if (child.name === 'wheel-front-right') {
+          this.wheelFrontRight = child
+          this.wheelFrontRight.rotation.order = 'YXZ'
+        } else if (child.name === 'wheel-back-left') {
+          this.wheelBackLeft = child
+        } else if (child.name === 'wheel-back-right') {
+          this.wheelBackRight = child
+        }
+      })
 
-        this.root.add(this.carModel)
-      },
-      undefined,
-      err => {
-        console.warn(`[RemoteVehicle] Error loading GLB for remote player ${this.playerId}:`, err)
-      }
-    )
+      this.root.add(this.carModel)
+    } catch (err) {
+      console.warn(`[RemoteVehicle] Error loading GLB for remote player ${this.playerId}:`, err)
+    }
   }
 
   /**
@@ -287,10 +326,20 @@ export class RemoteVehicle {
 
   public destroy() {
     this.scene.remove(this.root)
+
+    // Dispose nameplate sprite and its canvas texture
+    if (this.nameplateSprite) {
+      if (this.nameplateSprite.material.map) {
+        this.nameplateSprite.material.map.dispose()
+      }
+      this.nameplateSprite.material.dispose()
+      this.nameplateSprite = null
+    }
+
+    // Dispose cloned materials (preserve shared geometry in cache)
     this.root.traverse(child => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
         if (Array.isArray(mesh.material)) {
           mesh.material.forEach(m => m.dispose())
         } else if (mesh.material) {
