@@ -30,6 +30,7 @@ import type {
   PlayerResetRequest,
   PlayerResetResponse,
 } from '../../shared/src/messages.ts'
+import { PlayerProfileManager } from '../profile/PlayerProfile.ts'
 
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -99,6 +100,10 @@ export class NetworkManager {
 
     this.setStatus('connecting')
 
+    const profile = PlayerProfileManager.getInstance().getProfile()
+    this.localPlayerName = profile.displayName
+    this.localPlayerId = profile.id
+
     try {
       this.socket = io(this.serverUrl, {
         transports: ['websocket', 'polling'],
@@ -106,6 +111,11 @@ export class NetworkManager {
         reconnectionAttempts: 10,
         reconnectionDelay: 1000,
         timeout: 5000,
+        auth: {
+          playerId: profile.id,
+          displayName: profile.displayName,
+          selectedCarId: profile.selectedCarId,
+        },
       })
 
       this.setupSocketHandlers()
@@ -576,7 +586,16 @@ export class NetworkManager {
   }
 
   public setPlayerName(name: string): void {
-    this.localPlayerName = name
+    const cleaned = name.trim().slice(0, 24)
+    if (!cleaned) return
+    this.localPlayerName = cleaned
+    PlayerProfileManager.getInstance().setDisplayName(cleaned)
+    if (this.socket) {
+      this.socket.auth = {
+        ...((this.socket.auth as object) || {}),
+        displayName: cleaned,
+      }
+    }
   }
 
   public getPlayerName(): string {

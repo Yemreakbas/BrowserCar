@@ -5,13 +5,21 @@ export class PlayerManager {
   private counter = 0
 
   /**
-   * Register a newly connected client socket and assign a unique player ID.
+   * Register a newly connected client socket and assign or restore player ID.
    */
-  public registerPlayer(socketId: string, customName?: string): PlayerInfo {
+  public registerPlayer(socketId: string, customName?: string, existingPlayerId?: string): PlayerInfo {
     this.counter++
     const shortId = Math.random().toString(36).substring(2, 7)
-    const playerId = `p_${shortId}`
+    const playerId = existingPlayerId && existingPlayerId.trim() ? existingPlayerId.trim() : `p_${shortId}`
     const defaultName = customName || `Racer_${this.counter}`
+
+    if (existingPlayerId) {
+      for (const [sId, p] of this.playersBySocket.entries()) {
+        if (p.id === playerId) {
+          this.playersBySocket.delete(sId)
+        }
+      }
+    }
 
     const playerRecord = {
       id: playerId,

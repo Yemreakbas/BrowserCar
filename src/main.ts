@@ -27,6 +27,7 @@ import {
   getSelectedVehicleId,
   setSelectedVehicleId,
 } from './vehicle/VehicleDefinition.ts'
+import { PlayerProfileManager } from './profile/PlayerProfile.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -61,6 +62,11 @@ app.innerHTML = `
           <span style="font-size: 13px;">🏎️</span>
           <span>Garaj</span>
           <span class="reset-key-hint">G</span>
+        </button>
+        <button id="btn-profile" class="reset-btn" type="button" title="Sürücü Profili ve İstatistikler (P)">
+          <span style="font-size: 13px;">👤</span>
+          <span>Profil</span>
+          <span class="reset-key-hint">P</span>
         </button>
         <button id="btn-spawn" class="reset-btn" type="button" title="Başlangıç Konumunu Değiştir (C)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -329,7 +335,7 @@ app.innerHTML = `
         </button>
       </div>
 
-      <!-- Master Navigation Tabs: PLAY (SOLO) vs GARAGE (CARS) vs ONLINE (MULTIPLAYER) -->
+      <!-- Master Navigation Tabs: PLAY (SOLO) vs GARAGE (CARS) vs PROFILE (DRIVER) vs ONLINE (MULTIPLAYER) -->
       <div class="mp-master-tabs">
         <button id="main-nav-play" class="mp-master-tab-btn" type="button">
           <span>🎮</span>
@@ -337,7 +343,11 @@ app.innerHTML = `
         </button>
         <button id="main-nav-garage" class="mp-master-tab-btn" type="button">
           <span>🏎️</span>
-          <span>GARAJ (ARAÇ SEÇİMİ)</span>
+          <span>GARAJ (ARAÇLAR)</span>
+        </button>
+        <button id="main-nav-profile" class="mp-master-tab-btn" type="button">
+          <span>👤</span>
+          <span>PROFİL (SÜRÜCÜ)</span>
         </button>
         <button id="main-nav-online" class="mp-master-tab-btn active" type="button">
           <span>🌐</span>
@@ -367,6 +377,120 @@ app.innerHTML = `
         </div>
         <div id="garage-car-grid" class="garage-car-grid">
           <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Player Profile View (Phase 24) -->
+      <div id="mp-profile-view" style="display: none;">
+        <div class="profile-view-container">
+          <!-- Profile Header Card -->
+          <div class="profile-card-glass profile-header-card">
+            <div class="profile-avatar-box">
+              <div class="profile-avatar-inner">🏎️</div>
+            </div>
+            <div class="profile-info-col">
+              <div class="profile-name-row">
+                <input id="profile-name-input" class="profile-display-name-input" type="text" maxlength="24" placeholder="Sürücü Adı" />
+                <button id="btn-save-profile-name" class="btn-profile-save-name" type="button">Kaydet</button>
+              </div>
+              <div class="profile-meta-row">
+                <span id="profile-id-badge" class="profile-id-pill">ID: usr_...</span>
+                <span class="profile-tag-pill">Kalıcı Oturum</span>
+                <span id="profile-member-since">Üyelik: Yeni</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Car Showcase Banner -->
+          <div class="profile-car-banner">
+            <div class="profile-car-info">
+              <span class="profile-car-icon">🏎️</span>
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Aktif Sürüş Aracı</div>
+                <div id="profile-active-car-name" style="font-size: 15px; font-weight: 800; color: #f8fafc;">Apex GT Sedan</div>
+              </div>
+            </div>
+            <button id="btn-profile-go-garage" class="btn-select-car choose" style="width: auto; padding: 6px 14px; font-size: 11px;" type="button">
+              Garajda Değiştir ➔
+            </button>
+          </div>
+
+          <!-- Driver Statistics Grid -->
+          <div class="profile-stats-grid-cols">
+            <!-- Race Career -->
+            <div class="profile-stat-category-card">
+              <div class="profile-category-title">
+                <span>🏁</span>
+                <span>Yarış Kariyeri</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Katılınan Yarışlar</span>
+                <span id="stat-total-races" class="profile-stat-entry-val">0</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Kazanılan Yarışlar</span>
+                <span id="stat-races-won" class="profile-stat-entry-val" style="color: #fbbf24;">0 (%0)</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Tamamlanan Turlar</span>
+                <span id="stat-total-laps" class="profile-stat-entry-val">0</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">En Hızlı Tur Zamanı</span>
+                <span id="stat-best-lap" class="profile-stat-entry-val" style="color: #38bdf8;">--:--.--</span>
+              </div>
+            </div>
+
+            <!-- Drift Master -->
+            <div class="profile-stat-category-card">
+              <div class="profile-category-title">
+                <span>⚡</span>
+                <span>Drift Ustalığı</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">En İyi Skor</span>
+                <span id="stat-best-drift" class="profile-stat-entry-val" style="color: #facc15;">0 Puan</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Toplam Drift Puanı</span>
+                <span id="stat-total-drift" class="profile-stat-entry-val">0 Puan</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Maksimum Kombo</span>
+                <span id="stat-max-combo" class="profile-stat-entry-val" style="color: #f97316;">1.0x</span>
+              </div>
+            </div>
+
+            <!-- Driving Mileage & Playtime -->
+            <div class="profile-stat-category-card">
+              <div class="profile-category-title">
+                <span>🧭</span>
+                <span>Sürüş İstatistikleri</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Kat Edilen Mesafe</span>
+                <span id="stat-total-distance" class="profile-stat-entry-val">0.0 km</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Sürüş Süresi</span>
+                <span id="stat-total-playtime" class="profile-stat-entry-val">0 dk 0 sn</span>
+              </div>
+              <div class="profile-stat-entry">
+                <span class="profile-stat-entry-label">Oturum Durumu</span>
+                <span class="profile-stat-entry-val" style="color: #34d399;">Aktif (Kalıcı Oturum)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="profile-footer-actions">
+            <span style="font-size: 11px; color: #64748b;">
+              * Profil ve istatistiklerin tarayıcında kalıcı olarak saklanır ve sunucuya otomatik iletilir.
+            </span>
+            <button id="btn-profile-reset" class="btn-profile-reset" type="button">
+              Profili Sıfırla (Yeni Sürücü)
+            </button>
+          </div>
         </div>
       </div>
 
@@ -617,6 +741,7 @@ const btnReset = document.querySelector<HTMLButtonElement>('#btn-reset')!
 const btnSpawn = document.querySelector<HTMLButtonElement>('#btn-spawn')!
 const btnMenu = document.querySelector<HTMLButtonElement>('#btn-menu')!
 const btnGarage = document.querySelector<HTMLButtonElement>('#btn-garage')!
+const btnProfile = document.querySelector<HTMLButtonElement>('#btn-profile')!
 const btnAudio = document.querySelector<HTMLButtonElement>('#btn-audio')!
 const audioBtnIcon = document.querySelector<HTMLSpanElement>('#audio-btn-icon')!
 const audioBtnText = document.querySelector<HTMLSpanElement>('#audio-btn-text')!
@@ -722,14 +847,32 @@ const btnLeaveRoom = document.querySelector<HTMLButtonElement>('#btn-leave-room'
 const mpMemberCount = document.querySelector<HTMLSpanElement>('#mp-member-count')!
 const mpMemberList = document.querySelector<HTMLDivElement>('#mp-member-list')!
 
-// Phase 18 Lobby & Matchmaking Elements
+// Phase 18, 23 & 24 Lobby & Navigation Elements
 const mainNavPlay = document.querySelector<HTMLButtonElement>('#main-nav-play')!
 const mainNavGarage = document.querySelector<HTMLButtonElement>('#main-nav-garage')!
+const mainNavProfile = document.querySelector<HTMLButtonElement>('#main-nav-profile')!
 const mainNavOnline = document.querySelector<HTMLButtonElement>('#main-nav-online')!
 const mpPlayView = document.querySelector<HTMLDivElement>('#mp-play-view')!
 const mpGarageView = document.querySelector<HTMLDivElement>('#mp-garage-view')!
 const garageActiveBadge = document.querySelector<HTMLSpanElement>('#garage-active-badge')!
 const garageCarGrid = document.querySelector<HTMLDivElement>('#garage-car-grid')!
+const mpProfileView = document.querySelector<HTMLDivElement>('#mp-profile-view')!
+const profileNameInput = document.querySelector<HTMLInputElement>('#profile-name-input')!
+const btnSaveProfileName = document.querySelector<HTMLButtonElement>('#btn-save-profile-name')!
+const profileIdBadge = document.querySelector<HTMLSpanElement>('#profile-id-badge')!
+const profileMemberSince = document.querySelector<HTMLSpanElement>('#profile-member-since')!
+const profileActiveCarName = document.querySelector<HTMLDivElement>('#profile-active-car-name')!
+const btnProfileGoGarage = document.querySelector<HTMLButtonElement>('#btn-profile-go-garage')!
+const statTotalRaces = document.querySelector<HTMLSpanElement>('#stat-total-races')!
+const statRacesWon = document.querySelector<HTMLSpanElement>('#stat-races-won')!
+const statTotalLaps = document.querySelector<HTMLSpanElement>('#stat-total-laps')!
+const statBestLap = document.querySelector<HTMLSpanElement>('#stat-best-lap')!
+const statBestDrift = document.querySelector<HTMLSpanElement>('#stat-best-drift')!
+const statTotalDrift = document.querySelector<HTMLSpanElement>('#stat-total-drift')!
+const statMaxCombo = document.querySelector<HTMLSpanElement>('#stat-max-combo')!
+const statTotalDistance = document.querySelector<HTMLSpanElement>('#stat-total-distance')!
+const statTotalPlaytime = document.querySelector<HTMLSpanElement>('#stat-total-playtime')!
+const btnProfileReset = document.querySelector<HTMLButtonElement>('#btn-profile-reset')!
 const masterModeGrid = document.querySelector<HTMLDivElement>('#master-mode-grid')!
 const mpOnlineView = document.querySelector<HTMLDivElement>('#mp-online-view')!
 const mpPingBadge = document.querySelector<HTMLDivElement>('#mp-ping-badge')!
@@ -859,7 +1002,8 @@ async function bootstrap() {
   // 3. Build Dedicated Drift Arena & Slalom Playground (Centered at Z = -600, Phase 10)
   const driftTrack = new DriftTrack(scene, physicsWorld)
 
-  // 4. Build Physics Vehicle (Phase 23 Car Selection)
+  // 4. Build Physics Vehicle & Player Profile (Phase 23 & 24)
+  const playerProfileManager = PlayerProfileManager.getInstance()
   const initialVehicleId = getSelectedVehicleId()
   const vehicle = new Vehicle(
     scene,
@@ -961,6 +1105,7 @@ async function bootstrap() {
         )
         .join('')
 
+      playerProfileManager.recordRaceResult(result.bestLapTime, result.lapTimes.length, true)
       raceResultsModal.classList.add('open')
     },
     showMultiplayerRaceResults(results: RaceParticipantResult[]) {
@@ -978,6 +1123,10 @@ async function bootstrap() {
       raceResultsTrophy.textContent = trophy
       raceResultsTitle.textContent = title
       raceResultsSubtitle.textContent = `Grand Prix Çevrimiçi Yarışı • ${results.length} Pilot Mücadelesi`
+
+      const isWin = myRank === 1
+      const completedLaps = myResult && !myResult.dnf ? 3 : 0
+      playerProfileManager.recordRaceResult(myResult?.bestLapTime ?? null, completedLaps, isWin)
 
       raceMultiplayerResultsBody.innerHTML = results
         .map((r) => {
@@ -1088,6 +1237,9 @@ async function bootstrap() {
         })
         .join('')
 
+      if (myResult) {
+        playerProfileManager.recordDriftResult(myResult.totalScore, 1.0)
+      }
       driftResultsModal.classList.add('open')
     },
     hideDriftResults() {
@@ -1106,6 +1258,16 @@ async function bootstrap() {
       driftStatusText.textContent = statusText
       if (angleText) driftAngleText.textContent = angleText
       if (totalText) driftTotalScore.textContent = totalText
+
+      if (comboText) {
+        const comboMatch = comboText.match(/([\d.]+)x/)
+        if (comboMatch) {
+          const comboVal = parseFloat(comboMatch[1])
+          if (!isNaN(comboVal) && comboVal > 1.0) {
+            playerProfileManager.recordDriftResult(0, comboVal)
+          }
+        }
+      }
 
       if (isDrifting) {
         driftTelemetryCard.classList.add('drifting-active')
@@ -1183,10 +1345,48 @@ async function bootstrap() {
     },
   })
 
-  // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18 & 23)
+  // 6. Mode Selection Modal Management & Master Front-End Flow (Phase 18, 23 & 24)
   let isModalOpen = false
   let isMpModalOpen = false
-  let activeMasterTab: 'play' | 'garage' | 'online' = 'online'
+  let activeMasterTab: 'play' | 'garage' | 'profile' | 'online' = 'online'
+
+  const renderProfileView = () => {
+    const profile = playerProfileManager.getProfile()
+    const activeDef = vehicle.getActiveDefinition()
+
+    if (profileNameInput) profileNameInput.value = profile.displayName
+    if (profileIdBadge) profileIdBadge.textContent = `ID: ${profile.id}`
+    if (profileMemberSince) {
+      profileMemberSince.textContent = `Üyelik: ${new Date(profile.createdAt).toLocaleDateString('tr-TR')}`
+    }
+    if (profileActiveCarName) {
+      profileActiveCarName.textContent = `${activeDef.name} (${activeDef.badge})`
+    }
+
+    if (statTotalRaces) statTotalRaces.textContent = profile.stats.totalRaces.toString()
+    if (statRacesWon) {
+      const winPct = profile.stats.totalRaces > 0 ? Math.round((profile.stats.racesWon / profile.stats.totalRaces) * 100) : 0
+      statRacesWon.textContent = `${profile.stats.racesWon} (%${winPct})`
+    }
+    if (statTotalLaps) statTotalLaps.textContent = profile.stats.totalLaps.toString()
+    if (statBestLap) {
+      statBestLap.textContent = profile.stats.bestLapTime !== null ? formatTime(profile.stats.bestLapTime) : '--:--.--'
+    }
+
+    if (statBestDrift) statBestDrift.textContent = `${profile.stats.bestDriftScore.toLocaleString()} Puan`
+    if (statTotalDrift) statTotalDrift.textContent = `${profile.stats.totalDriftPoints.toLocaleString()} Puan`
+    if (statMaxCombo) statMaxCombo.textContent = `${profile.stats.maxDriftCombo.toFixed(1)}x`
+
+    if (statTotalDistance) {
+      const distKm = profile.stats.totalDistanceMeters / 1000
+      statTotalDistance.textContent = distKm >= 1.0 ? `${distKm.toFixed(1)} km` : `${profile.stats.totalDistanceMeters} m`
+    }
+    if (statTotalPlaytime) {
+      const mins = Math.floor(profile.stats.totalPlaytimeSeconds / 60)
+      const secs = profile.stats.totalPlaytimeSeconds % 60
+      statTotalPlaytime.textContent = `${mins} dk ${secs} sn`
+    }
+  }
 
   const renderGarageCars = () => {
     const currentDef = vehicle.getActiveDefinition()
@@ -1271,6 +1471,7 @@ async function bootstrap() {
       if (def) {
         audioManager.playClick()
         setSelectedVehicleId(def.id)
+        playerProfileManager.setSelectedCar(def.id)
         vehicle.setDefinition(def, () => {
           showResetToast(`🏎️ Araç Değiştirildi: ${def.name}`, 'info', 2200)
         })
@@ -1344,20 +1545,24 @@ async function bootstrap() {
     })
   }
 
-  const switchMasterTab = (tab: 'play' | 'garage' | 'online') => {
+  const switchMasterTab = (tab: 'play' | 'garage' | 'profile' | 'online') => {
     activeMasterTab = tab
     mainNavPlay.classList.toggle('active', tab === 'play')
     mainNavGarage.classList.toggle('active', tab === 'garage')
+    mainNavProfile.classList.toggle('active', tab === 'profile')
     mainNavOnline.classList.toggle('active', tab === 'online')
 
     mpPlayView.style.display = tab === 'play' ? 'block' : 'none'
     mpGarageView.style.display = tab === 'garage' ? 'block' : 'none'
+    mpProfileView.style.display = tab === 'profile' ? 'block' : 'none'
     mpOnlineView.style.display = tab === 'online' ? 'flex' : 'none'
 
     if (tab === 'play') {
       renderModeCards()
     } else if (tab === 'garage') {
       renderGarageCars()
+    } else if (tab === 'profile') {
+      renderProfileView()
     } else if (tab === 'online') {
       networkManager.refreshRooms()
     }
@@ -1371,12 +1576,16 @@ async function bootstrap() {
     audioManager.playClick()
     switchMasterTab('garage')
   })
+  mainNavProfile.addEventListener('click', () => {
+    audioManager.playClick()
+    switchMasterTab('profile')
+  })
   mainNavOnline.addEventListener('click', () => {
     audioManager.playClick()
     switchMasterTab('online')
   })
 
-  const openMasterModal = (tab: 'play' | 'garage' | 'online' = 'online') => {
+  const openMasterModal = (tab: 'play' | 'garage' | 'profile' | 'online' = 'online') => {
     isMpModalOpen = true
     isModalOpen = true
     mpModal.classList.add('open')
@@ -1402,6 +1611,11 @@ async function bootstrap() {
     else openMasterModal('garage')
   }
 
+  const toggleProfileModal = () => {
+    if (isMpModalOpen && activeMasterTab === 'profile') closeMasterModal()
+    else openMasterModal('profile')
+  }
+
   const closeMpModal = () => closeMasterModal()
   const toggleMpModal = () => {
     if (isMpModalOpen && activeMasterTab === 'online') closeMasterModal()
@@ -1412,6 +1626,44 @@ async function bootstrap() {
   btnGarage.addEventListener('click', () => {
     audioManager.playClick()
     toggleGarageModal()
+  })
+  btnProfile.addEventListener('click', () => {
+    audioManager.playClick()
+    toggleProfileModal()
+  })
+  btnProfileGoGarage.addEventListener('click', () => {
+    audioManager.playClick()
+    switchMasterTab('garage')
+  })
+
+  const saveProfileName = () => {
+    const newName = profileNameInput.value.trim()
+    if (newName) {
+      audioManager.playClick()
+      playerProfileManager.setDisplayName(newName)
+      networkManager.setPlayerName(newName)
+      mpNameInput.value = newName
+      showResetToast(`Sürücü Adı Güncellendi: ${newName}`, 'info', 1800)
+      renderProfileView()
+    }
+  }
+
+  btnSaveProfileName.addEventListener('click', saveProfileName)
+  profileNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveProfileName()
+  })
+
+  btnProfileReset.addEventListener('click', () => {
+    if (confirm('Sürücü profilini ve istatistiklerini sıfırlamak istiyor musun?')) {
+      audioManager.playClick()
+      const fresh = playerProfileManager.resetProfile()
+      networkManager.setPlayerName(fresh.displayName)
+      mpNameInput.value = fresh.displayName
+      const def = getVehicleDefinition(fresh.selectedCarId)
+      if (def) vehicle.setDefinition(def)
+      showResetToast('Profil ve istatistikler sıfırlandı!', 'warning', 2500)
+      renderProfileView()
+    }
   })
   modalClose.addEventListener('click', closeModal)
   modeModal.addEventListener('click', (e) => {
@@ -1494,8 +1746,11 @@ async function bootstrap() {
     }, 2500)
   })
 
+  mpNameInput.value = playerProfileManager.getProfile().displayName
   mpNameInput.addEventListener('input', () => {
-    networkManager.setPlayerName(mpNameInput.value.trim())
+    const val = mpNameInput.value.trim()
+    networkManager.setPlayerName(val)
+    playerProfileManager.setDisplayName(val)
   })
 
   // Phase 18: Quick Join
@@ -1707,7 +1962,7 @@ async function bootstrap() {
       btnMpReconnect.style.display = 'none'
 
       if (!mpNameInput.value) {
-        mpNameInput.value = `Racer_${playerId.slice(-4)}`
+        mpNameInput.value = playerProfileManager.getProfile().displayName || `Racer_${playerId.slice(-4)}`
         networkManager.setPlayerName(mpNameInput.value)
       }
     } else if (status === 'connecting') {
@@ -2227,6 +2482,9 @@ async function bootstrap() {
       case 'KeyG':
         openMasterModal('garage')
         break
+      case 'KeyP':
+        openMasterModal('profile')
+        break
     }
   })
 
@@ -2286,6 +2544,8 @@ async function bootstrap() {
   let lastTime = performance.now()
   let playerListTimer = 0
   let previousVehicleSpeed = 0
+  let profileStatsTimer = 0
+  let accumulatedDistanceMeters = 0
 
   function animate() {
     requestAnimationFrame(animate)
@@ -2339,6 +2599,15 @@ async function bootstrap() {
       updateCityPlayerList()
       updateOnlineRaceCard()
       updateOnlineDriftCard()
+    }
+
+    // 9.4d Player Profile Mileage & Playtime Tracking (Phase 24)
+    profileStatsTimer += delta
+    accumulatedDistanceMeters += Math.abs(vehicle.currentSpeed) * delta
+    if (profileStatsTimer >= 3.0) {
+      playerProfileManager.addDistanceAndPlaytime(accumulatedDistanceMeters, profileStatsTimer)
+      accumulatedDistanceMeters = 0
+      profileStatsTimer = 0
     }
 
     netSyncAccumulator += delta

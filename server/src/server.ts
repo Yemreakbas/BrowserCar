@@ -126,7 +126,10 @@ setInterval(() => {
 
 // 4. Socket.IO Connection & Event Handlers
 io.on('connection', socket => {
-  const player = playerManager.registerPlayer(socket.id)
+  const auth = (socket.handshake.auth || {}) as { playerId?: string; displayName?: string }
+  const preferredPlayerId = typeof auth.playerId === 'string' && auth.playerId.trim() ? auth.playerId.trim() : undefined
+  const preferredName = typeof auth.displayName === 'string' && auth.displayName.trim() ? auth.displayName.trim() : undefined
+  const player = playerManager.registerPlayer(socket.id, preferredName, preferredPlayerId)
   console.log(`[Multiplayer] Client connected: socket=${socket.id} -> player=${player.id} (${player.name})`)
 
   const initPayload: PlayerInitPayload = {

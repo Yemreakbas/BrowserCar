@@ -7,11 +7,12 @@ export interface GameHUDOptions {
   onMultiplayerClick?: () => void
   onAudioClick?: () => void
   onGarageClick?: () => void
+  onProfileClick?: () => void
 }
 
 /**
  * GameHUD coordinates all in-game head-up display components, mode-specific cards
- * (City, Race, Drift), speedometer, telemetry, notifications, audio controls, and animations (Phase 21-23).
+ * (City, Race, Drift), speedometer, telemetry, notifications, audio controls, and animations (Phase 21-24).
  */
 export class GameHUD implements ModeHUDController {
   // Common HUD Elements
@@ -31,6 +32,7 @@ export class GameHUD implements ModeHUDController {
   private audioBtnIcon: HTMLElement | null
   private audioBtnText: HTMLElement | null
   private btnGarage: HTMLElement | null
+  private btnProfile: HTMLElement | null
 
   // City Mode Card Elements
   private cityInfoCard: HTMLElement | null
@@ -84,6 +86,7 @@ export class GameHUD implements ModeHUDController {
     this.audioBtnIcon = document.getElementById('audio-btn-icon')
     this.audioBtnText = document.getElementById('audio-btn-text')
     this.btnGarage = document.getElementById('btn-garage')
+    this.btnProfile = document.getElementById('btn-profile')
 
     this.cityInfoCard = document.getElementById('city-info-card')
     this.citySpawnBadge = document.getElementById('city-spawn-badge')
@@ -132,6 +135,9 @@ export class GameHUD implements ModeHUDController {
     }
     if (options?.onGarageClick && this.btnGarage) {
       this.btnGarage.addEventListener('click', options.onGarageClick)
+    }
+    if (options?.onProfileClick && this.btnProfile) {
+      this.btnProfile.addEventListener('click', options.onProfileClick)
     }
   }
 
