@@ -21,6 +21,7 @@ export interface VehicleResetSystemOptions {
   tireSmoke?: TireSmokeSystem
   onNotice?: (message: string, type: 'info' | 'warning' | 'alert', durationMs?: number) => void
   onHint?: (hint: string | null) => void
+  onRespawn?: (reason: ResetReason) => void
 }
 
 /**
@@ -34,6 +35,7 @@ export class VehicleResetSystem {
   private tireSmoke?: TireSmokeSystem
   private onNotice?: (message: string, type: 'info' | 'warning' | 'alert', durationMs?: number) => void
   private onHint?: (hint: string | null) => void
+  private onRespawn?: (reason: ResetReason) => void
 
   // Detection thresholds
   public readonly FALL_Y_THRESHOLD = -4.5
@@ -67,6 +69,7 @@ export class VehicleResetSystem {
     this.tireSmoke = options.tireSmoke
     this.onNotice = options.onNotice
     this.onHint = options.onHint
+    this.onRespawn = options.onRespawn
   }
 
   /**
@@ -198,6 +201,7 @@ export class VehicleResetSystem {
 
     // Reset vehicle physics body & visual hierarchy
     this.vehicle.reset(targetPos.x, targetPos.z, targetRotY, targetPos.y || 0.45)
+    this.onRespawn?.(reason)
 
     // Synchronize authoritative respawn with multiplayer server
     const halfRot = targetRotY / 2

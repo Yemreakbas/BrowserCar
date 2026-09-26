@@ -19,6 +19,7 @@ import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
 import { VehicleResetSystem } from './vehicle/VehicleResetSystem.ts'
 import { OnlineRaceState, OnlineDriftState } from '../shared/src/constants.ts'
 import type { RaceParticipantResult, DriftParticipantProgress } from '../shared/src/messages.ts'
+import { FollowCamera, type CameraPreset } from './camera/FollowCamera.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -228,6 +229,8 @@ app.innerHTML = `
         </div>
         <div class="controls-legend">
           <span>Modlar: ESC</span>
+          <span>•</span>
+          <span>Kamera: V</span>
           <span>•</span>
           <span>Konum: C</span>
           <span>•</span>
@@ -1032,7 +1035,10 @@ async function bootstrap() {
     networkManager,
   })
 
-  // 8b. Initialize Vehicle Reset & Respawn System (Phase 19)
+  // 8b. Initialize Polished Follow Camera System (Phase 20)
+  const followCamera = new FollowCamera(camera, vehicle)
+
+  // 8c. Initialize Vehicle Reset & Respawn System (Phase 19)
   const vehicleResetSystem = new VehicleResetSystem({
     vehicle,
     modeManager,
@@ -1044,6 +1050,14 @@ async function bootstrap() {
     },
     onHint: (hint) => {
       setActionHint(hint)
+    },
+    onRespawn: (reason) => {
+      followCamera.snap()
+      if (reason === 'flipped' || reason === 'fall') {
+        followCamera.addTrauma(0.55)
+      } else if (reason === 'stuck') {
+        followCamera.addTrauma(0.3)
+      }
     },
   })
 
@@ -1083,6 +1097,12 @@ async function bootstrap() {
       const modeType = card.dataset.mode as GameModeType
       if (modeType) {
         modeManager.setMode(modeType)
+        followCamera.snap()
+        if (modeType === GameModeType.DRIFT) {
+          followCamera.setPreset('DRIFT')
+        } else {
+          followCamera.setPreset('NORMAL')
+        }
         renderModeCards()
         closeMasterModal()
       }
@@ -1460,13 +1480,15 @@ async function bootstrap() {
     }
   })
 
-  // 8.1 Mode-Aware Vehicle Respawn & Fall Recovery (Phase 19)
+  // 8.1 Mode-Aware Vehicle Respawn & Fall Recovery (Phase 19 & 20)
   const doRespawn = () => {
     vehicleResetSystem.respawn('manual')
+    followCamera.snap()
   }
 
   const doCycleSpawn = () => {
     modeManager.cycleSpawn()
+    followCamera.snap()
     if (vehicle && vehicle.rigidBody) {
       const p = vehicle.root.position
       const q = vehicle.root.quaternion
@@ -1781,6 +1803,7 @@ async function bootstrap() {
     // Synchronize local game mode with room mode
     if (payload.room.mode && payload.room.mode in GameModeType) {
       modeManager.setMode(payload.room.mode as GameModeType)
+      followCamera.snap()
     }
     // Distributed spawn assignment for City Free Roam
     if (payload.room.mode === GameModeType.CITY_FREE_ROAM && payload.player.spawnIndex !== undefined) {
@@ -1940,6 +1963,17 @@ async function bootstrap() {
       case 'KeyC':
         doCycleSpawn()
         break
+      case 'KeyV': {
+        const nextPreset = followCamera.cyclePreset()
+        const presetLabels: Record<CameraPreset, string> = {
+          NORMAL: 'Normal Takip (Dengeli)',
+          CLOSE: 'Yakın Takip (Dinamik)',
+          FAR: 'Uzak / Geniş Açı (Sinematik)',
+          DRIFT: 'Drift Modu (Geniş Savrulma)',
+        }
+        showResetToast(`Kamera: ${presetLabels[nextPreset]}`, 'info', 1200)
+        break
+      }
     }
   })
 
@@ -1978,12 +2012,6 @@ async function bootstrap() {
   btnSpawn.addEventListener('click', () => {
     doCycleSpawn()
   })
-
-  // --- 7. CHASE CAMERA VARIABLES ---
-  const cameraOffset = new THREE.Vector3(0, 3.8, -8.4)
-  const cameraLookAtLead = 2.5
-  const currentLookAt = new THREE.Vector3(0, 1.2, 0)
-  let cameraInitialized = false
 
   // --- 8. PERFORMANCE & FPS MONITOR ---
   let frameCount = 0
@@ -2063,26 +2091,8 @@ async function bootstrap() {
     sunLight.target.position.copy(vehicle.root.position)
     sunLight.target.updateMatrixWorld()
 
-    // 9.5 Smooth Third-Person Chase Camera
-    const desiredCamOffset = cameraOffset.clone().applyQuaternion(vehicle.root.quaternion)
-    const targetCamPosition = vehicle.root.position.clone().add(desiredCamOffset)
-
-    const desiredLookAtOffset = new THREE.Vector3(0, 1.2, cameraLookAtLead).applyQuaternion(
-      vehicle.root.quaternion
-    )
-    const targetLookAt = vehicle.root.position.clone().add(desiredLookAtOffset)
-
-    if (!cameraInitialized) {
-      camera.position.copy(targetCamPosition)
-      currentLookAt.copy(targetLookAt)
-      camera.lookAt(currentLookAt)
-      cameraInitialized = true
-    } else {
-      const camLerpAlpha = 1 - Math.exp(-7.0 * delta)
-      camera.position.lerp(targetCamPosition, camLerpAlpha)
-      currentLookAt.lerp(targetLookAt, camLerpAlpha)
-      camera.lookAt(currentLookAt)
-    }
+    // 9.5 Polished Third-Person Follow Camera (Phase 20)
+    followCamera.update(delta)
 
     // 9.6 HUD Speedometer & Gear Update
     const speedKmh = vehicle.getSpeedKmh()
