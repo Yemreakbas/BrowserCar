@@ -1809,3 +1809,123 @@ body {
   opacity: 1;
 }
 
+/* --- Phase 21: Mode-Specific HUD & Telemetry Styling --- */
+
+/* City Mode Card */
+.city-info-card {
+  min-width: 230px;
+  padding: 14px 20px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.city-spawn-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.city-online-count {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent-emerald);
+  text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+
+/* Race Position Badge */
+.race-position-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.race-position-badge.p1 {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  color: #ffffff;
+  border-color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+}
+
+.race-position-badge.p2 {
+  background: linear-gradient(135deg, #64748b, #94a3b8);
+  color: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 0 10px rgba(148, 163, 184, 0.4);
+}
+
+.race-position-badge.p3 {
+  background: linear-gradient(135deg, #b45309, #d97706);
+  color: #ffffff;
+  border-color: #f59e0b;
+  box-shadow: 0 0 10px rgba(180, 83, 9, 0.4);
+}
+
+/* Active Drift Combo Pulse */
+.drift-combo-text.active-drift {
+  animation: drift-fire-pulse 0.6s infinite alternate ease-in-out;
+}
+
+@keyframes drift-fire-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  }
+  100% {
+    transform: scale(1.08);
+    box-shadow: 0 0 18px rgba(239, 68, 68, 0.8), 0 0 28px rgba(245, 158, 11, 0.6);
+  }
+}
+
+/* Solo / General Drift Leaderboard Card */
+.drift-leaderboard-card {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 12;
+  background: var(--bg-hud);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 14px 18px;
+  border-radius: 16px;
+  min-width: 240px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.drift-leaderboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.drift-leaderboard-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+

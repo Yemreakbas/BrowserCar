@@ -216,7 +216,16 @@ export class RaceMode implements IGameMode {
           ? 'Bitiş Çizgisine İlerle!'
           : `Sektör ${this.raceSystem.nextCheckpointIndex}/5`
 
-      context.hud.updateRaceTelemetry(lapText, timeText, bestText, cpText)
+      // Calculate local player position rank
+      let posText = 'P1'
+      if (currentRoom.players && currentRoom.players.length > 0) {
+        const myId = net.getPlayerId()
+        const myIndex = currentRoom.players.findIndex((p) => p.id === myId)
+        const rank = myIndex >= 0 ? myIndex + 1 : 1
+        posText = `P${rank}/${currentRoom.players.length}`
+      }
+
+      context.hud.updateRaceTelemetry(lapText, timeText, bestText, cpText, posText)
 
       if (raceState === OnlineRaceState.RACING) {
         this.raceSystem.currentLapTime += delta
@@ -249,7 +258,7 @@ export class RaceMode implements IGameMode {
       raceUpdate.bestLapTime !== null ? this.raceSystem.formatTime(raceUpdate.bestLapTime) : '--:--.--'
     const cpText = raceUpdate.checkpointText
 
-    context.hud.updateRaceTelemetry(lapText, timeText, bestText, cpText)
+    context.hud.updateRaceTelemetry(lapText, timeText, bestText, cpText, 'P1')
 
     if (raceUpdate.lapMessage) {
       if (raceUpdate.state === RaceState.FINISHED) {

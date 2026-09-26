@@ -30,7 +30,9 @@ export interface ModeHUDController {
   setSpawnButtonVisible(visible: boolean): void
   setSpawnText?(text: string): void
   setDriftCardVisible(visible: boolean): void
-  updateRaceTelemetry(lapText: string, timeText: string, bestText: string, checkpointText: string): void
+  setCityCardVisible?(visible: boolean): void
+  updateCityHUD?(onlineCount: number, locationName: string, spawnIndexText: string): void
+  updateRaceTelemetry(lapText: string, timeText: string, bestText: string, checkpointText: string, positionText?: string): void
   setRaceCountdown?(text: string | null, color?: string | null): void
   setWrongWayVisible?(visible: boolean): void
   showRaceResults?(result: RaceResult): void

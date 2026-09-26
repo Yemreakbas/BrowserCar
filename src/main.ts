@@ -162,10 +162,31 @@ app.innerHTML = `
         </div>
       </div>
 
+      <!-- Dedicated City Free Roam HUD Card (Phase 21) -->
+      <div id="city-info-card" class="speedometer-card city-info-card" style="display: block;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 13px;">🏙️</span>
+            <span style="font-size: 11px; text-transform: uppercase; color: #38bdf8; font-weight: 800; letter-spacing: 0.5px;">ŞEHİR GEZİNTİSİ</span>
+          </div>
+          <span id="city-spawn-badge" class="city-spawn-badge">Konum 1/4</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; font-family: monospace;">
+          <span style="font-size: 11px; color: #94a3b8;">SÜRÜCÜLER</span>
+          <span id="city-online-count" class="city-online-count">1 Çevrimiçi</span>
+        </div>
+        <div id="city-location-name" style="font-size: 11px; color: #cbd5e1; font-weight: 600; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          Başlangıç Çizgisi (Güney Bulvarı)
+        </div>
+      </div>
+
       <!-- Dedicated Racing Telemetry Card for Race Track Mode -->
       <div id="race-telemetry-card" class="speedometer-card" style="display: none; min-width: 220px; padding: 12px 18px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <span style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px;">YARIŞ TELEMETRİSİ</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="race-position-badge" class="race-position-badge p1">P1</span>
+            <span style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 0.5px;">YARIŞ</span>
+          </div>
           <span id="race-lap-badge" style="font-size: 11px; font-weight: 800; background: #2563eb; color: white; padding: 2px 8px; border-radius: 6px;">TUR 1/3</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: baseline; font-family: monospace;">
@@ -188,7 +209,7 @@ app.innerHTML = `
             <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 8px #f59e0b;"></span>
             <span style="font-size: 11px; text-transform: uppercase; color: #fbbf24; font-weight: 800; letter-spacing: 0.6px;">DRIFT TELEMETRİSİ</span>
           </div>
-          <span id="drift-combo-text" style="font-size: 12px; font-weight: 800; background: linear-gradient(135deg, #d97706, #b45309); color: white; padding: 2px 10px; border-radius: 999px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);">1.0x</span>
+          <span id="drift-combo-text" class="drift-combo-text" style="font-size: 12px; font-weight: 800; background: linear-gradient(135deg, #d97706, #b45309); color: white; padding: 2px 10px; border-radius: 999px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);">1.0x</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: baseline; font-family: monospace;">
           <span style="font-size: 11px; color: #94a3b8;">SKOR</span>
@@ -562,7 +583,12 @@ const btnMenu = document.querySelector<HTMLButtonElement>('#btn-menu')!
 const spawnBtnText = document.querySelector<HTMLSpanElement>('#spawn-btn-text')!
 const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
 const hudFpsBadge = document.querySelector<HTMLDivElement>('#hud-fps-badge')!
+const cityInfoCard = document.querySelector<HTMLDivElement>('#city-info-card')!
+const citySpawnBadge = document.querySelector<HTMLSpanElement>('#city-spawn-badge')!
+const cityOnlineCount = document.querySelector<HTMLSpanElement>('#city-online-count')!
+const cityLocationName = document.querySelector<HTMLDivElement>('#city-location-name')!
 const raceTelemetryCard = document.querySelector<HTMLDivElement>('#race-telemetry-card')!
+const racePositionBadge = document.querySelector<HTMLSpanElement>('#race-position-badge')!
 const raceLapBadge = document.querySelector<HTMLSpanElement>('#race-lap-badge')!
 const raceLapTime = document.querySelector<HTMLSpanElement>('#race-lap-time')!
 const raceBestTime = document.querySelector<HTMLSpanElement>('#race-best-time')!
@@ -824,11 +850,31 @@ async function bootstrap() {
     setDriftCardVisible(visible: boolean) {
       driftTelemetryCard.style.display = visible ? 'block' : 'none'
     },
-    updateRaceTelemetry(lapText: string, timeText: string, bestText: string, checkpointText: string) {
+    setCityCardVisible(visible: boolean) {
+      cityInfoCard.style.display = visible ? 'block' : 'none'
+    },
+    updateCityHUD(onlineCount: number, locationName: string, spawnIndexText: string) {
+      cityOnlineCount.textContent = `${onlineCount} Çevrimiçi`
+      cityLocationName.textContent = locationName
+      citySpawnBadge.textContent = spawnIndexText
+    },
+    updateRaceTelemetry(lapText: string, timeText: string, bestText: string, checkpointText: string, positionText?: string) {
       raceLapBadge.textContent = lapText
       raceLapTime.textContent = timeText
       raceBestTime.textContent = bestText
       raceCheckpointStatus.textContent = checkpointText
+      if (racePositionBadge && positionText) {
+        racePositionBadge.textContent = positionText
+        if (positionText.startsWith('P1') || positionText === '1/1') {
+          racePositionBadge.className = 'race-position-badge p1'
+        } else if (positionText.startsWith('P2')) {
+          racePositionBadge.className = 'race-position-badge p2'
+        } else if (positionText.startsWith('P3')) {
+          racePositionBadge.className = 'race-position-badge p3'
+        } else {
+          racePositionBadge.className = 'race-position-badge'
+        }
+      }
     },
     setRaceCountdown(text: string | null, color?: string | null) {
       if (text) {

@@ -19,6 +19,7 @@ export class CityFreeRoamMode implements IGameMode {
 
     context.hud.setTelemetryVisible(false)
     context.hud.setDriftCardVisible(false)
+    context.hud.setCityCardVisible?.(true)
     context.hud.setSpawnButtonVisible(true)
     context.hud.setSubtitle('Şehir • Serbest Gezinti', this.badgeColor)
 
@@ -26,6 +27,7 @@ export class CityFreeRoamMode implements IGameMode {
   }
 
   private smokeTimer = 0
+  private cityHudTimer = 0
   private tempWheelL = new THREE.Vector3()
   private tempWheelR = new THREE.Vector3()
   private tempCarVel = new THREE.Vector3()
@@ -45,9 +47,21 @@ export class CityFreeRoamMode implements IGameMode {
         context.tireSmoke.emit(this.tempWheelR, this.tempCarVel)
       }
     }
+
+    // Refresh city HUD online count periodically
+    this.cityHudTimer += delta
+    if (this.cityHudTimer >= 0.5) {
+      this.cityHudTimer = 0
+      const currentRoom = context.networkManager?.getCurrentRoom()
+      const onlineCount = currentRoom && currentRoom.mode === 'CITY_FREE_ROAM' ? currentRoom.players.length : 1
+      const locations = context.cityWorld.spawnLocations
+      const spawn = locations[this.currentSpawnIndex % locations.length]
+      context.hud.updateCityHUD?.(onlineCount, spawn.name, `Konum ${this.currentSpawnIndex + 1}/${locations.length}`)
+    }
   }
 
   public onExit(context: ModeContext): void {
+    context.hud.setCityCardVisible?.(false)
     if (context.tireSmoke) {
       context.tireSmoke.reset()
     }
@@ -78,5 +92,9 @@ export class CityFreeRoamMode implements IGameMode {
     context.vehicle.reset(spawn.position.x, spawn.position.z, spawn.rotationY)
     context.hud.setSubtitle(`${spawn.name} (${index + 1}/${locations.length})`, '#38bdf8')
     context.hud.setSpawnText?.(`Konum ${index + 1}/${locations.length}`)
+
+    const currentRoom = context.networkManager?.getCurrentRoom()
+    const onlineCount = currentRoom && currentRoom.mode === 'CITY_FREE_ROAM' ? currentRoom.players.length : 1
+    context.hud.updateCityHUD?.(onlineCount, spawn.name, `Konum ${index + 1}/${locations.length}`)
   }
 }
