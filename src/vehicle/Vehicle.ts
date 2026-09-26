@@ -224,7 +224,7 @@ export class Vehicle {
     // Drift Detection Criteria
     // Requires sufficient forward velocity to prevent stationary spinning
     const hasDriftSpeed = absForward >= this.config.driftMinSpeed
-    const isUnderHandbrake = keys.handbrake && hasDriftSpeed
+    const isUnderHandbrake = keys.handbrake && hasDriftSpeed && (keys.left || keys.right || this.slipAngleDeg >= 6.0)
     const isAngleSustained = this.slipAngleDeg >= this.config.driftMinAngleDeg && hasDriftSpeed
     const isNotSpunOut = this.slipAngleDeg <= this.config.driftMaxAngleDeg
 
@@ -237,12 +237,14 @@ export class Vehicle {
     }
 
     // 4. Configurable Traction & Dynamic Drift Dynamics
-    // Under active drift or handbrake, lateral grip drops to allow smooth, controllable slides
-    const targetTraction = this.isDrifting
+    // Under active drift or handbrake, lateral grip drops immediately to allow smooth, controllable slides
+    const targetTraction = keys.handbrake
+      ? Math.min(this.config.lateralGripDrift, 0.18)
+      : this.isDrifting
       ? this.config.lateralGripDrift
       : this.config.lateralGripNormal
 
-    const gripLerpRate = this.isDrifting ? 14.0 : this.config.driftGripRecoverySpeed
+    const gripLerpRate = (this.isDrifting || keys.handbrake) ? 14.0 : this.config.driftGripRecoverySpeed
     this.currentTraction = THREE.MathUtils.lerp(
       this.currentTraction,
       targetTraction,
@@ -253,22 +255,17 @@ export class Vehicle {
     let newLinvelX = linvel.x - right.x * lateralSpeed * lateralDamping
     let newLinvelZ = linvel.z - right.z * lateralSpeed * lateralDamping
 
-    // 5. Non-Linear Acceleration Curve & Braking Dynamics
+    // 5. Powertrain Dynamics (Throttle, Reverse, Foot Brake & Handbrake)
     let impulse = 0
-    if (keys.handbrake) {
-      // Balanced handbrake deceleration: slows forward velocity moderately without killing slide momentum
-      const brakeImpulse =
-        Math.min(delta * this.config.handbrakePower, absForward) *
-        Math.sign(forwardSpeed)
-      impulse -= brakeImpulse
-    } else if (keys.forward) {
-      if (forwardSpeed < 0) {
+
+    if (keys.forward) {
+      if (forwardSpeed < -0.2) {
         // Foot brake while moving backwards
         impulse += this.config.brakingPower * delta
       } else if (forwardSpeed < this.config.maxForwardSpeed) {
-        if (this.isDrifting) {
+        if (this.isDrifting || keys.handbrake) {
           // Power-slide throttle: delivers continuous drive thrust to power through corners
-          impulse += this.config.baseAcceleration * 0.85 * delta
+          impulse += this.config.baseAcceleration * 0.92 * delta
         } else {
           // Progressive acceleration curve: strong low-end torque tapering smoothly near top speed
           const speedRatio = Math.min(Math.max(forwardSpeed / this.config.maxForwardSpeed, 0), 1)
@@ -278,12 +275,14 @@ export class Vehicle {
         }
       }
     } else if (keys.backward) {
-      if (forwardSpeed > 0.4) {
+      if (forwardSpeed > 0.3) {
         // Foot brake while moving forward
         impulse -= this.config.brakingPower * delta
       } else if (forwardSpeed > this.config.maxReverseSpeed) {
-        // Reversing
-        impulse -= this.config.reverseAcceleration * delta
+        // Fast, responsive reversing with strong initial torque punch
+        const revRatio = Math.min(Math.abs(forwardSpeed) / Math.abs(this.config.maxReverseSpeed), 1.0)
+        const revTorque = Math.pow(1.0 - revRatio, 0.7) * 0.7 + 0.3
+        impulse -= this.config.reverseAcceleration * revTorque * delta
       }
     } else {
       // Natural rolling drag & aerodynamic coasting friction
@@ -291,6 +290,16 @@ export class Vehicle {
         Math.min(delta * this.config.coastingDrag, absForward) *
         Math.sign(forwardSpeed)
       impulse -= dragAmount
+    }
+
+    // Handbrake deceleration: gently decelerates without killing slide momentum
+    // If player is also pressing throttle (power-sliding), handbrake drag is even lighter
+    if (keys.handbrake) {
+      const effectiveHBrakePower = keys.forward ? 1.5 : this.config.handbrakePower
+      const brakeImpulse =
+        Math.min(delta * effectiveHBrakePower, absForward) *
+        Math.sign(forwardSpeed)
+      impulse -= brakeImpulse
     }
 
     newLinvelX += forward.x * impulse
@@ -326,11 +335,20 @@ export class Vehicle {
     )
 
     // Apply Yaw Angular Velocity
-    if (absForward > 0.1) {
-      const speedFactor = Math.min(absForward / 4.8, 1.0)
+    if (absForward > 0.08) {
+      const speedThreshold = forwardSpeed >= 0 ? 4.8 : 2.5
+      const speedFactor = Math.min(absForward / speedThreshold, 1.0)
       const directionSign = forwardSpeed >= 0 ? 1 : -1
+
       // Drift yaw boost to enhance oversteer and counter-steer control during slides
-      const driftMultiplier = this.isDrifting ? this.config.driftYawMultiplier : 1.0
+      let driftMultiplier = 1.0
+      if (this.isDrifting) {
+        driftMultiplier = this.config.driftYawMultiplier
+      } else if (keys.handbrake && absForward > 1.8 && (keys.left || keys.right)) {
+        // Immediate turn-in oversteer kick when pulling handbrake into a corner
+        driftMultiplier = 1.65
+      }
+
       const targetAngVel =
         this.currentSteerAngle *
         this.config.baseTurnRate *

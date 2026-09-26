@@ -41,14 +41,13 @@ export interface VehicleConfig {
 
 export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   maxForwardSpeed: 29.0, // ~104.4 km/h
-  maxReverseSpeed: -11.0, // ~39.6 km/h
-
+  maxReverseSpeed: -12.5, // ~45.0 km/h
   baseAcceleration: 22.0, // Responsive initial launch
   accelerationCurvePower: 0.85, // Smooth torque tapering as top speed is approached
-  reverseAcceleration: 11.0,
+  reverseAcceleration: 20.0, // Strong, responsive reverse launch
 
   brakingPower: 30.0, // Strong, predictable foot braking
-  handbrakePower: 13.5, // Balanced handbrake deceleration allowing momentum to carry slide
+  handbrakePower: 3.5, // Balanced slide drag without killing drift momentum
   coastingDrag: 4.8, // Smooth deceleration when coasting
 
   maxSteerAngle: 0.48, // ~27.5 degrees at low speed
@@ -59,12 +58,12 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   baseTurnRate: 2.2, // Dynamic yaw response
 
   lateralGripNormal: 0.94, // Solid grip tracking wheels for normal driving
-  lateralGripDrift: 0.24, // Low lateral grip allowing long, beautiful arcade slides
+  lateralGripDrift: 0.20, // Low lateral grip allowing long, beautiful arcade slides
   driftGripRecoverySpeed: 4.2, // Smooth, predictable grip recovery
-  driftMinSpeed: 4.0, // ~14.4 km/h minimum speed
+  driftMinSpeed: 2.8, // ~10 km/h minimum speed for sustained low-speed drifts
   driftMinAngleDeg: 10.0, // 10 degrees slip angle
   driftMaxAngleDeg: 80.0, // 80 degrees spin-out threshold
-  driftYawMultiplier: 1.35, // Yaw boost during active drift
+  driftYawMultiplier: 1.55, // Yaw boost during active drift for sharp counter-steering
 
   suspensionPitchMax: 0.045, // Mild squat on acceleration / dive on braking
   suspensionRollMax: 0.08, // Subtle body lean in sharp turns
@@ -72,3 +71,4 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
 
   wheelRadius: 0.435, // Kenney sedan wheel radius at 1.45x scale
 }
+
