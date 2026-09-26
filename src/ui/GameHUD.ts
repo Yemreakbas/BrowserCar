@@ -5,11 +5,12 @@ export interface GameHUDOptions {
   onResetClick?: () => void
   onMenuClick?: () => void
   onMultiplayerClick?: () => void
+  onAudioClick?: () => void
 }
 
 /**
  * GameHUD coordinates all in-game head-up display components, mode-specific cards
- * (City, Race, Drift), speedometer, telemetry, notifications, and animations (Phase 21).
+ * (City, Race, Drift), speedometer, telemetry, notifications, audio controls, and animations (Phase 21-22).
  */
 export class GameHUD implements ModeHUDController {
   // Common HUD Elements
@@ -25,6 +26,9 @@ export class GameHUD implements ModeHUDController {
   private btnReset: HTMLElement | null
   private btnMenu: HTMLElement | null
   private btnMultiplayer: HTMLElement | null
+  private btnAudio: HTMLElement | null
+  private audioBtnIcon: HTMLElement | null
+  private audioBtnText: HTMLElement | null
 
   // City Mode Card Elements
   private cityInfoCard: HTMLElement | null
@@ -74,6 +78,9 @@ export class GameHUD implements ModeHUDController {
     this.btnReset = document.getElementById('btn-reset')
     this.btnMenu = document.getElementById('btn-menu')
     this.btnMultiplayer = document.getElementById('btn-multiplayer')
+    this.btnAudio = document.getElementById('btn-audio')
+    this.audioBtnIcon = document.getElementById('audio-btn-icon')
+    this.audioBtnText = document.getElementById('audio-btn-text')
 
     this.cityInfoCard = document.getElementById('city-info-card')
     this.citySpawnBadge = document.getElementById('city-spawn-badge')
@@ -116,6 +123,9 @@ export class GameHUD implements ModeHUDController {
     }
     if (options?.onMultiplayerClick && this.btnMultiplayer) {
       this.btnMultiplayer.addEventListener('click', options.onMultiplayerClick)
+    }
+    if (options?.onAudioClick && this.btnAudio) {
+      this.btnAudio.addEventListener('click', options.onAudioClick)
     }
   }
 
@@ -160,6 +170,15 @@ export class GameHUD implements ModeHUDController {
       } else {
         this.hudFpsBadge.style.color = '#ef4444'
       }
+    }
+  }
+
+  public setAudioMuted(isMuted: boolean): void {
+    if (this.audioBtnIcon) {
+      this.audioBtnIcon.textContent = isMuted ? '🔇' : '🔊'
+    }
+    if (this.audioBtnText) {
+      this.audioBtnText.textContent = isMuted ? 'Sessiz' : 'Ses'
     }
   }
 

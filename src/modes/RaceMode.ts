@@ -34,6 +34,7 @@ export class RaceMode implements IGameMode {
   // Checkpoint pass throttling & direction tracking
   private lastPassTime = 0
   private tempCarForward = new THREE.Vector3()
+  private lastCountdownText: string | null = null
 
   public onEnter(context: ModeContext): void {
     context.cityWorld.group.visible = false
@@ -249,6 +250,19 @@ export class RaceMode implements IGameMode {
       context.vehicle.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
 
+    if (raceUpdate.countdownText !== this.lastCountdownText) {
+      if (
+        raceUpdate.countdownText === '3' ||
+        raceUpdate.countdownText === '2' ||
+        raceUpdate.countdownText === '1'
+      ) {
+        context.audio?.playCountdown(false)
+      } else if (raceUpdate.countdownText === 'BAŞLA! 🏁') {
+        context.audio?.playCountdown(true)
+      }
+      this.lastCountdownText = raceUpdate.countdownText
+    }
+
     context.hud.setRaceCountdown?.(raceUpdate.countdownText, raceUpdate.countdownColor)
     context.hud.setWrongWayVisible?.(raceUpdate.isWrongWay)
 
@@ -272,6 +286,7 @@ export class RaceMode implements IGameMode {
 
     if (raceUpdate.state === RaceState.FINISHED && raceUpdate.result && !this.resultsShown) {
       this.resultsShown = true
+      context.audio?.playFinish()
       context.hud.showRaceResults?.(raceUpdate.result)
     }
   }
@@ -321,6 +336,7 @@ export class RaceMode implements IGameMode {
   private handleServerCountdown(payload: RaceStartCountdownPayload, context: ModeContext): void {
     context.hud.setSubtitle('⏱️ GERİ SAYIM BAŞLADI!', '#f59e0b')
     context.hud.setRaceCountdown?.(payload.countdownSeconds.toString(), '#f59e0b')
+    context.audio?.playCountdown(false)
   }
 
   private handleServerStarted(_payload: RaceStartedPayload, context: ModeContext): void {
@@ -331,6 +347,7 @@ export class RaceMode implements IGameMode {
 
     context.hud.setSubtitle('🏁 YARIŞ BAŞLADI! TAM GAZ!', '#22c55e')
     context.hud.setRaceCountdown?.('BAŞLA! 🏁', '#22c55e')
+    context.audio?.playCountdown(true)
 
     setTimeout(() => {
       context.hud.setRaceCountdown?.(null)
@@ -344,6 +361,7 @@ export class RaceMode implements IGameMode {
   private handlePlayerFinished(result: RaceParticipantResult, context: ModeContext): void {
     const net = context.networkManager
     if (net && net.getPlayerId() === result.playerId) {
+      context.audio?.playFinish()
       context.hud.setSubtitle(`🏁 ${result.rank}. BİTİRDİN! (${result.totalTime.toFixed(1)}s)`, '#facc15')
     }
   }

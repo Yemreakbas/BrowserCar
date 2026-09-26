@@ -20,6 +20,7 @@ import { VehicleResetSystem } from './vehicle/VehicleResetSystem.ts'
 import { OnlineRaceState, OnlineDriftState } from '../shared/src/constants.ts'
 import type { RaceParticipantResult, DriftParticipantProgress } from '../shared/src/messages.ts'
 import { FollowCamera, type CameraPreset } from './camera/FollowCamera.ts'
+import { AudioManager } from './audio/AudioManager.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -41,7 +42,7 @@ app.innerHTML = `
           <span id="hud-net-text">Multiplayer</span>
           <span id="hud-net-id" class="reset-key-hint" style="display: none; background: rgba(56, 189, 248, 0.2); color: #38bdf8;">--</span>
         </button>
-        <button id="btn-menu" class="reset-btn" type="button" title="Oyun Modları ve Harita Seçimi (ESC / M)">
+        <button id="btn-menu" class="reset-btn" type="button" title="Oyun Modları ve Harita Seçimi (ESC)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="12 2 2 7 12 12 22 7 12 2"/>
             <polyline points="2 17 12 22 22 17"/>
@@ -65,6 +66,11 @@ app.innerHTML = `
           </svg>
           <span>Sıfırla</span>
           <span class="reset-key-hint">R</span>
+        </button>
+        <button id="btn-audio" class="reset-btn" type="button" title="Sesi Aç / Kapat (M)">
+          <span id="audio-btn-icon" style="font-size: 13px;">🔊</span>
+          <span id="audio-btn-text">Ses</span>
+          <span class="reset-key-hint">M</span>
         </button>
       </div>
     </header>
@@ -580,6 +586,9 @@ const keyD = document.querySelector<HTMLDivElement>('#key-d')!
 const btnReset = document.querySelector<HTMLButtonElement>('#btn-reset')!
 const btnSpawn = document.querySelector<HTMLButtonElement>('#btn-spawn')!
 const btnMenu = document.querySelector<HTMLButtonElement>('#btn-menu')!
+const btnAudio = document.querySelector<HTMLButtonElement>('#btn-audio')!
+const audioBtnIcon = document.querySelector<HTMLSpanElement>('#audio-btn-icon')!
+const audioBtnText = document.querySelector<HTMLSpanElement>('#audio-btn-text')!
 const spawnBtnText = document.querySelector<HTMLSpanElement>('#spawn-btn-text')!
 const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
 const hudFpsBadge = document.querySelector<HTMLDivElement>('#hud-fps-badge')!
@@ -1068,6 +1077,28 @@ async function bootstrap() {
   const networkManager = new NetworkManager()
   const remotePlayerManager = new RemotePlayerManager(scene, networkManager)
 
+  // 7b. Initialize Driving Audio Manager (Phase 22)
+  const audioManager = new AudioManager()
+
+  const toggleMute = () => {
+    const isMuted = audioManager.toggleMute()
+    if (audioBtnIcon) audioBtnIcon.textContent = isMuted ? '🔇' : '🔊'
+    if (audioBtnText) audioBtnText.textContent = isMuted ? 'Sessiz' : 'Ses'
+    btnAudio.classList.toggle('muted', isMuted)
+    showResetToast(isMuted ? 'Ses Kapatıldı' : 'Ses Açıldı', 'info', 1100)
+  }
+
+  if (audioManager.getIsMuted()) {
+    if (audioBtnIcon) audioBtnIcon.textContent = '🔇'
+    if (audioBtnText) audioBtnText.textContent = 'Sessiz'
+    btnAudio.classList.add('muted')
+  }
+
+  btnAudio.addEventListener('click', () => {
+    audioManager.playClick()
+    toggleMute()
+  })
+
   // 8. Initialize Mode Manager (Default: City Free Roam)
   const modeManager = new ModeManager({
     scene,
@@ -1079,6 +1110,7 @@ async function bootstrap() {
     hud: modeHud,
     tireSmoke,
     networkManager,
+    audio: audioManager,
   })
 
   // 8b. Initialize Polished Follow Camera System (Phase 20)
@@ -1099,7 +1131,9 @@ async function bootstrap() {
     },
     onRespawn: (reason) => {
       followCamera.snap()
+      audioManager.playRespawn()
       if (reason === 'flipped' || reason === 'fall') {
+        audioManager.playCollision(0.85)
         followCamera.addTrauma(0.55)
       } else if (reason === 'stuck') {
         followCamera.addTrauma(0.3)
@@ -2001,7 +2035,8 @@ async function bootstrap() {
         break
       }
       case 'KeyM':
-        toggleModal()
+      case 'KeyU':
+        toggleMute()
         break
       case 'KeyR':
         doRespawn()
@@ -2052,11 +2087,23 @@ async function bootstrap() {
   })
 
   btnReset.addEventListener('click', () => {
+    audioManager.playClick()
     doRespawn()
   })
 
   btnSpawn.addEventListener('click', () => {
+    audioManager.playClick()
     doCycleSpawn()
+  })
+
+  btnMenu.addEventListener('click', () => {
+    audioManager.playClick()
+    openModal()
+  })
+
+  btnMultiplayer.addEventListener('click', () => {
+    audioManager.playClick()
+    openMasterModal('online')
   })
 
   // --- 8. PERFORMANCE & FPS MONITOR ---
@@ -2066,6 +2113,7 @@ async function bootstrap() {
   // --- 9. MAIN ANIMATION & PHYSICS LOOP ---
   let lastTime = performance.now()
   let playerListTimer = 0
+  let previousVehicleSpeed = 0
 
   function animate() {
     requestAnimationFrame(animate)
@@ -2083,6 +2131,25 @@ async function bootstrap() {
 
     // 9.2b Vehicle Reset & Out-Of-Bounds Fall / Flip Monitor (Phase 19)
     vehicleResetSystem.update(delta, keys)
+
+    // 9.2c Driving Audio Engine (Phase 22)
+    const speedKmh = vehicle.getSpeedKmh()
+    const speedDrop = previousVehicleSpeed - vehicle.currentSpeed
+    if (previousVehicleSpeed > 3.5 && speedDrop > 3.2 && !keys.backward) {
+      audioManager.playCollision(Math.min(speedDrop / 10, 1.0))
+      followCamera.addTrauma(Math.min(speedDrop / 15, 0.7))
+    }
+    previousVehicleSpeed = vehicle.currentSpeed
+
+    const throttle = keys.forward ? 1.0 : (keys.backward && vehicle.currentSpeed < -0.2 ? 0.75 : 0.0)
+    const isBraking = keys.backward && vehicle.currentSpeed > 0.5
+    audioManager.updateDrivingAudio({
+      speedKmh,
+      throttle,
+      isBraking,
+      isDrifting: vehicle.isDrifting,
+      slipAngleRad: vehicle.slipAngle,
+    })
 
     // 9.3 Active Game Mode Update
     modeManager.update(delta)
@@ -2141,7 +2208,6 @@ async function bootstrap() {
     followCamera.update(delta)
 
     // 9.6 HUD Speedometer & Gear Update
-    const speedKmh = vehicle.getSpeedKmh()
     hudSpeed.textContent = speedKmh.toString()
 
     const speedPercent = Math.min(speedKmh / (vehicle.config.maxForwardSpeed * 3.6), 1.0) * 100
