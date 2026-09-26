@@ -16,6 +16,7 @@ import type {
   RaceResultsPayload,
 } from '../../../shared/src/messages.ts'
 import type { LeaderboardManager } from '../leaderboard/LeaderboardManager.ts'
+import { AntiCheatValidator } from '../security/AntiCheat.ts'
 
 export interface TrackCheckpointDef {
   id: number
@@ -267,29 +268,30 @@ export class OnlineRaceManager {
     const racer = session.racers.get(playerId)
     if (!racer || racer.finished) return false
 
-    // 1. Must hit the expected sequential checkpoint
-    if (checkpointIndex !== racer.nextCheckpointIndex) {
+    if (!AntiCheatValidator.isValidVec3(position)) {
       return false
     }
 
     const targetCp = OnlineRaceManager.CIRCUIT_CHECKPOINTS[checkpointIndex]
     if (!targetCp) return false
 
-    // 2. Spatial validation: player position must be near the target checkpoint
-    const dx = position[0] - targetCp.x
-    const dz = position[2] - targetCp.z
-    const dist = Math.hypot(dx, dz)
-    const maxAllowedDist = targetCp.radius + 15.0 // Generous tolerance for latency / wide lines
+    // Anti-cheat authoritative checkpoint validation (sequence, lap, spatial, anti-teleport)
+    const cpValidation = AntiCheatValidator.validateRaceCheckpointPass({
+      expectedNextCheckpoint: racer.nextCheckpointIndex,
+      requestedCheckpoint: checkpointIndex,
+      lastCheckpointTime: racer.lastCheckpointTime,
+      expectedLap: racer.currentLap,
+      reportedLap: lap,
+      playerPosition: position,
+      checkpointDef: targetCp,
+      minIntervalMs: 850,
+    })
 
-    if (dist > maxAllowedDist) {
+    if (!cpValidation.valid) {
       return false
     }
 
-    // 3. Minimum time validation (anti-teleport: at least 700ms between checkpoints)
     const now = Date.now()
-    if (now - racer.lastCheckpointTime < 700) {
-      return false
-    }
     racer.lastCheckpointTime = now
 
     // 4. Progress update

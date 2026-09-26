@@ -32,6 +32,8 @@ import { RoomManager } from './rooms/RoomManager.ts'
 import { OnlineRaceManager } from './race/OnlineRaceManager.ts'
 import { OnlineDriftManager } from './drift/OnlineDriftManager.ts'
 import { LeaderboardManager } from './leaderboard/LeaderboardManager.ts'
+import { rateLimiter } from './security/RateLimiter.ts'
+import { AntiCheatValidator } from './security/AntiCheat.ts'
 import type {
   LeaderboardCategory,
   LeaderboardSubmitRequest,
@@ -164,8 +166,12 @@ io.on('connection', socket => {
     displayName?: string
     lastRoomId?: string
   }
-  const preferredPlayerId = typeof auth.playerId === 'string' && auth.playerId.trim() ? auth.playerId.trim() : undefined
-  const preferredName = typeof auth.displayName === 'string' && auth.displayName.trim() ? auth.displayName.trim() : undefined
+  const preferredPlayerId = typeof auth.playerId === 'string' && auth.playerId.trim()
+    ? AntiCheatValidator.sanitizeString(auth.playerId, 32)
+    : undefined
+  const preferredName = typeof auth.displayName === 'string' && auth.displayName.trim()
+    ? AntiCheatValidator.sanitizeString(auth.displayName, 24)
+    : undefined
   const player = playerManager.registerPlayer(socket.id, preferredName, preferredPlayerId)
   console.log(`[Multiplayer] Client connected: socket=${socket.id} -> player=${player.id} (${player.name})`)
 
@@ -235,10 +241,15 @@ io.on('connection', socket => {
     }
   }
 
-  // --- PLAYER: STATE UPDATE & AUTHORITATIVE VALIDATION (PHASE 14) ---
+  // --- PLAYER: STATE UPDATE & AUTHORITATIVE VALIDATION (PHASE 14 & 28) ---
   socket.on(SOCKET_EVENTS.PLAYER_STATE, (state: PlayerStateMessage) => {
     try {
-      if (!state || !state.roomId) return
+      if (!state || typeof state !== 'object' || !state.roomId) return
+      // Rate limit incoming telemetry to physical transmission bounds (max 40 burst, 30 Hz refill)
+      if (!rateLimiter.check(`${socket.id}:state`, 40, 30)) {
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
       if (!currentPlayer || currentPlayer.id !== state.playerId) return
 
@@ -282,11 +293,18 @@ io.on('connection', socket => {
     }
   })
 
-  // --- PLAYER: RESET / RESPAWN VALIDATION (PHASE 19) ---
+  // --- PLAYER: RESET / RESPAWN VALIDATION (PHASE 19 & 28) ---
   socket.on(SOCKET_EVENTS.PLAYER_RESET, (data: PlayerResetRequest, callback?: (response: PlayerResetResponse) => void) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:reset`, 2, 0.7)) {
+        if (typeof callback === 'function') {
+          callback({ success: false, position: [0, 0.45, 0], rotation: [0, 0, 0, 1], reason: 'Rate limit aşıldı. Lütfen bekleyin.' })
+        }
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
-      if (!currentPlayer || !data || !data.roomId) {
+      if (!currentPlayer || !data || typeof data !== 'object' || !data.roomId) {
         if (typeof callback === 'function') {
           callback({ success: false, position: [0, 0.45, 0], rotation: [0, 0, 0, 1], reason: 'Geçersiz oyuncu veya oda' })
         }
@@ -294,8 +312,8 @@ io.on('connection', socket => {
       }
 
       const room = roomManager.getRoom(data.roomId)
-      let targetPos: [number, number, number] = data.position ? [...data.position] : [0, 0.45, 0]
-      let targetRot: [number, number, number, number] = data.rotation ? [...data.rotation] : [0, 0, 0, 1]
+      let targetPos: [number, number, number] = AntiCheatValidator.isValidVec3(data.position) ? [...data.position] : [0, 0.45, 0]
+      let targetRot: [number, number, number, number] = AntiCheatValidator.isValidQuat(data.rotation) ? [...data.rotation] : [0, 0, 0, 1]
 
       // Legal mode coordinates verification
       let isLegal = true
@@ -372,6 +390,15 @@ io.on('connection', socket => {
   // --- ROOM: CREATE ---
   socket.on(SOCKET_EVENTS.ROOM_CREATE, (data: CreateRoomRequest, callback?: (response: unknown) => void) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:room_create`, 3, 0.5)) {
+        if (typeof callback === 'function') callback({ success: false, error: 'İstekler çok hızlı. Lütfen bekleyin.' })
+        return
+      }
+      if (!data || typeof data !== 'object') {
+        if (typeof callback === 'function') callback({ success: false, error: 'Geçersiz istek biçimi' })
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
       if (!currentPlayer) return
 
@@ -389,8 +416,9 @@ io.on('connection', socket => {
       }
 
       if (data.playerName) {
-        playerManager.updatePlayerName(socket.id, data.playerName)
-        currentPlayer.name = data.playerName
+        const cleanName = AntiCheatValidator.sanitizeString(data.playerName, 24)
+        playerManager.updatePlayerName(socket.id, cleanName)
+        currentPlayer.name = cleanName
       }
 
       const room = roomManager.createRoom(currentPlayer, data)
@@ -428,6 +456,15 @@ io.on('connection', socket => {
   // --- ROOM: JOIN ---
   socket.on(SOCKET_EVENTS.ROOM_JOIN, (data: JoinRoomRequest, callback?: (response: unknown) => void) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:room_join`, 6, 1.5)) {
+        if (typeof callback === 'function') callback({ success: false, error: 'İstekler çok hızlı. Lütfen bekleyin.' })
+        return
+      }
+      if (!data || typeof data !== 'object') {
+        if (typeof callback === 'function') callback({ success: false, error: 'Geçersiz istek biçimi' })
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
       if (!currentPlayer) return
 
@@ -524,12 +561,18 @@ io.on('connection', socket => {
   // --- ROOM: QUICK JOIN ---
   socket.on(SOCKET_EVENTS.ROOM_QUICK_JOIN, (data: QuickJoinRequest, callback?: (response: unknown) => void) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:room_join`, 6, 1.5)) {
+        if (typeof callback === 'function') callback({ success: false, error: 'İstekler çok hızlı. Lütfen bekleyin.' })
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
       if (!currentPlayer) return
 
       if (data?.playerName) {
-        playerManager.updatePlayerName(socket.id, data.playerName)
-        currentPlayer.name = data.playerName
+        const cleanName = AntiCheatValidator.sanitizeString(data.playerName, 24)
+        playerManager.updatePlayerName(socket.id, cleanName)
+        currentPlayer.name = cleanName
       }
 
       const roomToJoin = roomManager.findQuickJoinRoom(data?.preferredMode)
@@ -671,6 +714,7 @@ io.on('connection', socket => {
 
   // --- DISCONNECT ---
   socket.on('disconnect', reason => {
+    rateLimiter.clearClient(socket.id)
     const player = playerManager.unregisterPlayer(socket.id)
     if (player) {
       console.log(`[Multiplayer] Client disconnected: player=${player.id} reason=${reason}`)
@@ -696,7 +740,7 @@ io.on('connection', socket => {
     }
   })
 
-  // --- ONLINE RACE LIFECYCLE (PHASE 16) ---
+  // --- ONLINE RACE LIFECYCLE (PHASE 16 & 28) ---
   socket.on(SOCKET_EVENTS.RACE_READY_TOGGLE, (ready: boolean) => {
     try {
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
@@ -712,8 +756,15 @@ io.on('connection', socket => {
 
   socket.on(SOCKET_EVENTS.RACE_CHECKPOINT_PASS, (data: RaceCheckpointPassRequest) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:race_cp`, 4, 1.5)) {
+        return // Rate limit checkpoint pass events
+      }
+      if (!data || typeof data !== 'object' || typeof data.checkpointIndex !== 'number') {
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
-      if (!currentPlayer || !currentPlayer.roomId || !data) return
+      if (!currentPlayer || !currentPlayer.roomId) return
       const room = roomManager.getRoom(currentPlayer.roomId)
       if (room && room.mode === 'RACE') {
         onlineRaceManager.handleCheckpointPass(
@@ -742,7 +793,7 @@ io.on('connection', socket => {
     }
   })
 
-  // --- ONLINE DRIFT LIFECYCLE (PHASE 17) ---
+  // --- ONLINE DRIFT LIFECYCLE (PHASE 17 & 28) ---
   socket.on(SOCKET_EVENTS.DRIFT_READY_TOGGLE, () => {
     try {
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
@@ -758,8 +809,15 @@ io.on('connection', socket => {
 
   socket.on(SOCKET_EVENTS.DRIFT_SCORE_SUBMISSION, (data: DriftScoreSubmission) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:drift_score`, 35, 25)) {
+        return // Rate limit high-frequency drift submissions
+      }
+      if (!data || typeof data !== 'object') {
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
-      if (!currentPlayer || !currentPlayer.roomId || !data) return
+      if (!currentPlayer || !currentPlayer.roomId) return
       const room = roomManager.getRoom(currentPlayer.roomId)
       if (room && room.mode === 'DRIFT') {
         onlineDriftManager.processScoreSubmission(currentPlayer.id, data)
@@ -782,7 +840,7 @@ io.on('connection', socket => {
     }
   })
 
-  // --- LEADERBOARDS (PHASE 25) ---
+  // --- LEADERBOARDS (PHASE 25 & 28) ---
   socket.on(SOCKET_EVENTS.LEADERBOARD_ALL, (callback?: (data: unknown) => void) => {
     try {
       const all = leaderboardManager.getAll(50)
@@ -811,6 +869,13 @@ io.on('connection', socket => {
 
   socket.on(SOCKET_EVENTS.LEADERBOARD_SUBMIT, (data: LeaderboardSubmitRequest, callback?: (res: unknown) => void) => {
     try {
+      if (!rateLimiter.check(`${socket.id}:lb_submit`, 3, 1.0)) {
+        if (typeof callback === 'function') {
+          callback({ success: false, error: 'İstekler çok hızlı gönderiliyor (Rate limit).' })
+        }
+        return
+      }
+
       const currentPlayer = playerManager.getPlayerBySocket(socket.id)
       const auth = (socket.handshake.auth || {}) as { playerId?: string; displayName?: string }
       const playerId = currentPlayer ? currentPlayer.id : (auth.playerId || socket.id)

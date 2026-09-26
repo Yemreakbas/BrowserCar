@@ -16,6 +16,7 @@ import type {
   DriftSessionFinishedPayload,
 } from '../../../shared/src/messages.ts'
 import type { LeaderboardManager } from '../leaderboard/LeaderboardManager.ts'
+import { AntiCheatValidator } from '../security/AntiCheat.ts'
 
 export interface DrifterProgress {
   playerId: string
@@ -249,6 +250,10 @@ export class OnlineDriftManager {
    * Do not trust arbitrary client scores - enforce server sanity boundaries.
    */
   public processScoreSubmission(playerId: string, sub: DriftScoreSubmission): boolean {
+    if (!sub || typeof sub !== 'object') {
+      return false
+    }
+
     const session = this.sessions.get(sub.roomId)
     if (!session || session.state !== OnlineDriftState.ACTIVE) {
       return false
@@ -263,7 +268,25 @@ export class OnlineDriftManager {
     const dt = Math.max((now - drifter.lastSubmissionTime) / 1000, 0.04)
     drifter.lastSubmissionTime = now
 
-    // 1. Sanity check: is spin-out?
+    // Authoritative Anti-Cheat validation
+    const validation = AntiCheatValidator.validateDriftSubmission({
+      isSpinOut: sub.isSpinOut,
+      banked: sub.banked,
+      pointsDelta: sub.pointsDelta,
+      serverAccumulatedPoints: drifter.currentPoints,
+      speedKmh: sub.speedKmh,
+      slipAngleDeg: sub.slipAngleDeg,
+      duration: sub.duration,
+      comboMultiplier: sub.comboMultiplier,
+      zoneBonus: sub.zoneBonus,
+      dtSec: dt,
+    })
+
+    if (!validation.valid) {
+      return false
+    }
+
+    // 1. Spin-out: resets drift points & combo immediately
     if (sub.isSpinOut) {
       drifter.currentPoints = 0
       drifter.comboMultiplier = 1.0
@@ -272,12 +295,13 @@ export class OnlineDriftManager {
       return true
     }
 
-    // 2. Sanity check: Banked points
+    // 2. Banked points: strictly bounded by server-accumulated points
     if (sub.banked) {
-      const bankedAmount = Math.max(0, Math.round(sub.pointsDelta || drifter.currentPoints))
-      
-      // Maximum single bank sanity limit: 150,000 points
-      const validatedBank = Math.min(bankedAmount, 150000)
+      const validatedBank = validation.bankableAmount || 0
+      if (validatedBank <= 0) {
+        return false
+      }
+
       drifter.totalScore += validatedBank
       if (validatedBank > drifter.bestDriftScore) {
         drifter.bestDriftScore = validatedBank
@@ -294,14 +318,14 @@ export class OnlineDriftManager {
         )
       }
 
-      if (this.leaderboardManager && sub.comboMultiplier >= 1.5) {
+      if (this.leaderboardManager && drifter.comboMultiplier >= 1.5) {
         this.leaderboardManager.recordRecord(
           'best_drift_combo',
           drifter.playerId,
           drifter.playerName,
           'car-tuner',
           'Drift Pilotu',
-          sub.comboMultiplier
+          drifter.comboMultiplier
         )
       }
 
@@ -315,40 +339,10 @@ export class OnlineDriftManager {
       return true
     }
 
-    // 3. Active Drift Sanity Validation
-    // Plausibility bounds:
-    // Speed: 10 - 250 km/h
-    // Angle: 8 - 85 deg
-    // Zone bonus: 1.0 - 2.5
-    // Multiplier: 1.0 - 5.0
-    const validSpeed = sub.speedKmh >= 8 && sub.speedKmh <= 260
-    const validAngle = sub.slipAngleDeg >= 7 && sub.slipAngleDeg <= 88
-    const validZone = sub.zoneBonus >= 0.9 && sub.zoneBonus <= 2.6
-
-    if (!validSpeed || !validAngle || !validZone) {
-      // Discard unrealistic telemetry frame
-      return false
-    }
-
-    // Max theoretical rate: 160 base * 2.5 maxAngle * 2.2 maxSpeed * 2.5 maxZone * 5.0 maxCombo = 11,000 pts/sec
-    const maxTheoreticalRate = 11000
-    const maxAllowedPoints = Math.round(maxTheoreticalRate * 1.35 * dt) + 50
-
-    // Clamp reported points delta to physical maximum
-    const clampedPointsDelta = Math.min(Math.max(0, sub.pointsDelta), maxAllowedPoints)
-
-    // Clamp combo multiplier based on reported continuous duration
-    const maxAllowedCombo =
-      sub.duration >= 8.0 ? 5.0 :
-      sub.duration >= 6.0 ? 4.0 :
-      sub.duration >= 4.0 ? 3.0 :
-      sub.duration >= 2.5 ? 2.5 :
-      sub.duration >= 1.5 ? 2.0 :
-      sub.duration >= 0.8 ? 1.5 : 1.0
-
+    // 3. Active Drift: increment server-authoritative points within theoretical physics rate
     drifter.isDrifting = true
-    drifter.currentPoints += clampedPointsDelta
-    drifter.comboMultiplier = Math.min(Math.max(1.0, sub.comboMultiplier), maxAllowedCombo)
+    drifter.currentPoints += validation.sanitizedPointsDelta || 0
+    drifter.comboMultiplier = validation.sanitizedCombo || 1.0
 
     this.recalculateRanks(session)
     return true

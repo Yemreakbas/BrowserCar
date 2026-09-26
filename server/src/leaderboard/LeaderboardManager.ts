@@ -10,6 +10,7 @@ import type {
   LeaderboardSubmitRequest,
   LeaderboardSubmitResponse,
 } from '../../../shared/src/messages.ts'
+import { AntiCheatValidator } from '../security/AntiCheat.ts'
 
 export class LeaderboardManager {
   private io?: SocketIOServer
@@ -414,6 +415,10 @@ export class LeaderboardManager {
     playerName: string,
     data: LeaderboardSubmitRequest
   ): LeaderboardSubmitResponse {
+    if (!data || typeof data !== 'object') {
+      return { success: false, error: 'Geçersiz veri biçimi' }
+    }
+
     const now = Date.now()
     const lastTime = this.lastSubmissionByPlayer.get(playerId) || 0
     if (now - lastTime < 1000) {
@@ -429,12 +434,17 @@ export class LeaderboardManager {
       }
     }
 
+    // Sanitize and validate inputs
+    const sanitizedPlayerName = AntiCheatValidator.sanitizeString(playerName, 24, 'Pilot')
+    const validatedCarId = AntiCheatValidator.isAuthorizedCar(data.carId) ? data.carId! : 'sedan_sports'
+    const sanitizedCarName = AntiCheatValidator.sanitizeString(data.carName, 32, 'Standart Spor')
+
     const res = this.recordRecord(
       data.category,
       playerId,
-      playerName,
-      data.carId || 'car-sedan',
-      data.carName || 'Standart Sedan',
+      sanitizedPlayerName,
+      validatedCarId,
+      sanitizedCarName,
       data.score,
       data.trackId
     )

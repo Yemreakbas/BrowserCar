@@ -7,6 +7,7 @@ import type {
   AuthoritativePlayerState,
   RoomSnapshotPayload,
 } from '../../../shared/src/messages.ts'
+import { AntiCheatValidator } from '../security/AntiCheat.ts'
 
 export class RoomManager {
   private rooms = new Map<string, RoomInfo>()
@@ -85,14 +86,20 @@ export class RoomManager {
    */
   public createRoom(hostPlayer: PlayerInfo, options: CreateRoomRequest): RoomInfo {
     const roomId = `room_${Math.random().toString(36).substring(2, 8)}`
-    const roomCode = (options.roomCode && options.roomCode.trim().toUpperCase()) || this.generateRoomCode()
-    const roomName = (options.name && options.name.trim()) || `Oda #${roomCode}`
+    const rawCode = (options.roomCode && options.roomCode.trim().toUpperCase()) || this.generateRoomCode()
+    const roomCode = AntiCheatValidator.sanitizeString(rawCode, 12, this.generateRoomCode())
+    const rawName = (options.name && options.name.trim()) || `Oda #${roomCode}`
+    const roomName = AntiCheatValidator.sanitizeString(rawName, 32, `Oda #${roomCode}`)
+
+    const allowedModes = ['CITY_FREE_ROAM', 'RACE', 'DRIFT']
+    const mode = options.mode && allowedModes.includes(options.mode) ? options.mode : 'CITY_FREE_ROAM'
+    const map = AntiCheatValidator.sanitizeString(options.map, 24, 'CITY')
 
     const room: RoomInfo = {
       id: roomId,
       name: roomName,
-      mode: options.mode || 'CITY_FREE_ROAM',
-      map: options.map || 'CITY',
+      mode,
+      map,
       maxPlayers: Math.min(Math.max(options.maxPlayers || 8, 2), 16),
       currentPlayers: 1,
       players: [{ ...hostPlayer, isHost: true }],
@@ -270,12 +277,12 @@ export class RoomManager {
     serverTick: number
   ): { valid: boolean; state?: AuthoritativePlayerState; needsCorrection: boolean; correctionReason?: string } {
     if (
-      !state.position ||
-      state.position.length !== 3 ||
-      !state.position.every(n => Number.isFinite(n)) ||
-      !state.rotation ||
-      state.rotation.length !== 4 ||
-      !state.rotation.every(n => Number.isFinite(n))
+      !state ||
+      typeof state !== 'object' ||
+      typeof state.roomId !== 'string' ||
+      typeof state.playerId !== 'string' ||
+      !AntiCheatValidator.isValidVec3(state.position) ||
+      !AntiCheatValidator.isValidQuat(state.rotation)
     ) {
       return {
         valid: false,
@@ -292,7 +299,9 @@ export class RoomManager {
     const prev = roomStates.get(state.playerId)
     let validatedPos: [number, number, number] = [...state.position]
     let validatedRot: [number, number, number, number] = [...state.rotation]
-    let validatedVel: [number, number, number] = state.velocity ? [...state.velocity] : [0, 0, 0]
+    let validatedVel: [number, number, number] = AntiCheatValidator.isValidVec3(state.velocity, -300, 300)
+      ? [...state.velocity]
+      : [0, 0, 0]
     let needsCorrection = false
     let correctionReason: string | undefined = undefined
 
@@ -379,8 +388,8 @@ export class RoomManager {
       position: validatedPos,
       rotation: validatedRot,
       velocity: validatedVel,
-      speed: Math.max(-40, Math.min(220, state.speed || 0)),
-      steering: Math.max(-0.65, Math.min(0.65, state.steering || 0)),
+      speed: Number.isFinite(state.speed) ? Math.max(-40, Math.min(220, state.speed)) : 0,
+      steering: Number.isFinite(state.steering) ? Math.max(-0.65, Math.min(0.65, state.steering)) : 0,
       isBraking: !!state.isBraking,
       isDrifting: !!state.isDrifting,
       lastProcessedSequence: state.sequence || 0,
