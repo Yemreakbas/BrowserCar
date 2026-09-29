@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { DEFAULT_SERVER_URL, SOCKET_EVENTS } from '../../shared/src/constants.ts'
+import { DEFAULT_SERVER_PORT, DEFAULT_SERVER_URL, SOCKET_EVENTS } from '../../shared/src/constants.ts'
 import type {
   CreateRoomRequest,
   JoinRoomRequest,
@@ -45,6 +45,12 @@ function resolveDefaultServerUrl(): string {
   }
   if (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SERVER_URL) {
     return (import.meta as any).env.VITE_SERVER_URL as string
+  }
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (window.location.port === '4173' || window.location.port === '5173') {
+      return `${window.location.protocol}//${window.location.hostname}:${DEFAULT_SERVER_PORT}`
+    }
+    return window.location.origin
   }
   return DEFAULT_SERVER_URL
 }

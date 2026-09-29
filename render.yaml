@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: browsercar-server
+    runtime: node
+    plan: free
+    buildCommand: npm --prefix server run build
+    startCommand: npm --prefix server run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: CORS_ORIGIN
+        value: "*"

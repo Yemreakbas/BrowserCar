@@ -40,6 +40,8 @@ import type {
 } from '../../shared/src/messages.ts'
 
 const PORT = Number(process.env.PORT) || DEFAULT_SERVER_PORT
+const HOST = process.env.HOST || '0.0.0.0'
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*'
 const startTime = Date.now()
 let currentServerTick = 0
 
@@ -49,7 +51,7 @@ const leaderboardManager = new LeaderboardManager()
 
 // 1. Create HTTP Server with Health & Status Endpoints
 const httpServer = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN)
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
@@ -109,7 +111,7 @@ const httpServer = http.createServer((req, res) => {
 // 2. Attach Socket.IO Server
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: '*',
+    origin: CORS_ORIGIN === '*' ? '*' : CORS_ORIGIN.split(',').map((s) => s.trim()),
     methods: ['GET', 'POST'],
   },
   pingInterval: 10000,
@@ -895,12 +897,41 @@ io.on('connection', socket => {
 })
 
 // 5. Start Server
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, HOST, () => {
   console.log(`===============================================`)
   console.log(`🚀 BrowserCar Authoritative Multiplayer Server is running!`)
-  console.log(`📡 URL: http://localhost:${PORT}`)
+  console.log(`📡 URL: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   console.log(`⏱️ Tick Rate: ${SERVER_TICK_RATE} Hz (${SERVER_TICK_INTERVAL_MS}ms)`)
-  console.log(`🩺 Health check: http://localhost:${PORT}/health`)
+  console.log(`🩺 Health check: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/health`)
   console.log(`⚡ Ready for authoritative simulation & vehicle sync`)
   console.log(`===============================================`)
 })
+
+// 6. Graceful Shutdown Handlers (Phase 30)
+function handleShutdown(signal: string) {
+  console.log(`\n[Server] Received ${signal}, shutting down gracefully...`)
+  try {
+    io.emit(SOCKET_EVENTS.SERVER_ERROR, {
+      code: 'SERVER_SHUTTING_DOWN',
+      message: 'Sunucu yeniden başlatılıyor veya kapatılıyor...',
+    })
+    io.close(() => {
+      httpServer.close(() => {
+        console.log('[Server] HTTP and Socket.IO servers closed cleanly.')
+        process.exit(0)
+      })
+    })
+  } catch (err) {
+    console.error('[Server] Error during graceful shutdown:', err)
+    process.exit(1)
+  }
+
+  // Force exit after 5 seconds if connections linger
+  setTimeout(() => {
+    console.error('[Server] Forced shutdown: timeout exceeded.')
+    process.exit(1)
+  }, 5000).unref()
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'))
+process.on('SIGINT', () => handleShutdown('SIGINT'))
