@@ -621,6 +621,10 @@ export class RaceTrack {
     }
   }
 
+  public getTrackCurve(): THREE.CatmullRomCurve3 {
+    return this.trackCurve
+  }
+
   public setVisible(visible: boolean) {
     this.group.visible = visible
   }

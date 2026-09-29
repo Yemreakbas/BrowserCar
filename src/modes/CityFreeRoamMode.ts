@@ -24,6 +24,7 @@ export class CityFreeRoamMode implements IGameMode {
     context.hud.setSubtitle('Şehir • Serbest Gezinti', this.badgeColor)
 
     this.applySpawn(context, this.currentSpawnIndex)
+    context.aiManager?.initCityTraffic(context.cityWorld)
   }
 
   private smokeTimer = 0
@@ -33,6 +34,9 @@ export class CityFreeRoamMode implements IGameMode {
   private tempCarVel = new THREE.Vector3()
 
   public onUpdate(delta: number, context: ModeContext): void {
+    // Update ambient city traffic
+    context.aiManager?.update(delta, context.vehicle)
+
     if (
       context.tireSmoke &&
       (context.vehicle.isDrifting || (context.vehicle.isHandbrakeActive && Math.abs(context.vehicle.currentSpeed) > 3.0))
@@ -61,6 +65,7 @@ export class CityFreeRoamMode implements IGameMode {
   }
 
   public onExit(context: ModeContext): void {
+    context.aiManager?.clear()
     context.hud.setCityCardVisible?.(false)
     if (context.tireSmoke) {
       context.tireSmoke.reset()
@@ -69,6 +74,7 @@ export class CityFreeRoamMode implements IGameMode {
 
   public onReset(context: ModeContext): void {
     this.applySpawn(context, this.currentSpawnIndex)
+    context.aiManager?.initCityTraffic(context.cityWorld)
   }
 
   public getRespawnPoint(context: ModeContext): { position: THREE.Vector3; rotationY: number; name: string } {

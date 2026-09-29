@@ -117,6 +117,7 @@ export class RaceMode implements IGameMode {
       const pole = context.raceTrack.getPolePosition()
       context.vehicle.reset(pole.position.x, pole.position.z, pole.rotationY)
       this.raceSystem.startRace(context.raceTrack)
+      context.aiManager?.initRaceAI(context.raceTrack)
     }
   }
 
@@ -266,13 +267,21 @@ export class RaceMode implements IGameMode {
     context.hud.setRaceCountdown?.(raceUpdate.countdownText, raceUpdate.countdownColor)
     context.hud.setWrongWayVisible?.(raceUpdate.isWrongWay)
 
+    // Update AI Opponents & compute dynamic position rank
+    let posText = 'P1'
+    if (context.aiManager && context.aiManager.vehicles.length > 0) {
+      context.aiManager.setRaceLocked(raceUpdate.isControlLocked)
+      const { playerRank, totalRacers } = context.aiManager.update(delta, context.vehicle)
+      posText = `P${playerRank}/${totalRacers}`
+    }
+
     const lapText = `TUR ${raceUpdate.currentLap}/${raceUpdate.totalLaps}`
     const timeText = this.raceSystem.formatTime(raceUpdate.currentLapTime)
     const bestText =
       raceUpdate.bestLapTime !== null ? this.raceSystem.formatTime(raceUpdate.bestLapTime) : '--:--.--'
     const cpText = raceUpdate.checkpointText
 
-    context.hud.updateRaceTelemetry(lapText, timeText, bestText, cpText, 'P1')
+    context.hud.updateRaceTelemetry(lapText, timeText, bestText, cpText, posText)
 
     if (raceUpdate.lapMessage) {
       if (raceUpdate.state === RaceState.FINISHED) {
@@ -292,6 +301,7 @@ export class RaceMode implements IGameMode {
   }
 
   public onExit(context: ModeContext): void {
+    context.aiManager?.clear()
     context.hud.setRaceCountdown?.(null)
     context.hud.setWrongWayVisible?.(false)
     context.hud.hideRaceResults?.()
@@ -312,6 +322,7 @@ export class RaceMode implements IGameMode {
       const pole = context.raceTrack.getPolePosition()
       context.vehicle.reset(pole.position.x, pole.position.z, pole.rotationY)
       this.raceSystem.startRace(context.raceTrack)
+      context.aiManager?.initRaceAI(context.raceTrack)
       context.hud.setSubtitle('Yarış Sıfırlandı • 3 Tur Başlıyor', this.badgeColor)
     }
   }

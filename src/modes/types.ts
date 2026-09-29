@@ -54,6 +54,7 @@ export interface ModeHUDController {
 
 import type { DriftTrack } from '../world/DriftTrack.ts'
 import type { AudioManager } from '../audio/AudioManager.ts'
+import type { AIManager } from '../ai/AIManager.ts'
 
 export interface ModeContext {
   scene: THREE.Scene
@@ -66,6 +67,7 @@ export interface ModeContext {
   tireSmoke: TireSmokeSystem
   networkManager?: NetworkManager
   audio?: AudioManager
+  aiManager?: AIManager
 }
 
 export interface IGameMode {

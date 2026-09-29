@@ -11,6 +11,7 @@ import { ModeManager } from './modes/ModeManager.ts'
 import { CityFreeRoamMode } from './modes/CityFreeRoamMode.ts'
 import { RaceMode } from './modes/RaceMode.ts'
 import { DriftMode } from './modes/DriftMode.ts'
+import { AIManager } from './ai/AIManager.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
@@ -1438,7 +1439,8 @@ async function bootstrap() {
     toggleMute()
   })
 
-  // 8. Initialize Mode Manager (Default: City Free Roam)
+  // 8. Initialize AI Manager & Mode Manager (Default: City Free Roam)
+  const aiManager = new AIManager(scene)
   const modeManager = new ModeManager({
     scene,
     physicsWorld,
@@ -1450,6 +1452,7 @@ async function bootstrap() {
     tireSmoke,
     networkManager,
     audio: audioManager,
+    aiManager,
   })
 
   // 8b. Initialize Polished Follow Camera System (Phase 20)
