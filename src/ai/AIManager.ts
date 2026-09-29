@@ -222,7 +222,7 @@ export class AIManager {
   }
 
   // --- 3. RUNTIME UPDATE ---
-  public update(delta: number, playerVehicle: Vehicle): { playerRank: number; totalRacers: number } {
+  public update(delta: number, playerVehicle: Vehicle, isNight: boolean = false): { playerRank: number; totalRacers: number } {
     if (!this.isEnabled || this.vehicles.length === 0) {
       return { playerRank: 1, totalRacers: 1 }
     }
@@ -253,7 +253,7 @@ export class AIManager {
       const v = this.vehicles[i]
       // Exclude self from obstacle list
       const otherObstacles = obstacles.filter((_, idx) => idx !== i + 1)
-      v.update(delta, otherObstacles)
+      v.update(delta, otherObstacles, isNight)
     }
 
     // If in Race Mode, calculate player standings

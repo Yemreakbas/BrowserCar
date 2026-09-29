@@ -270,8 +270,9 @@ export class RaceMode implements IGameMode {
     // Update AI Opponents & compute dynamic position rank
     let posText = 'P1'
     if (context.aiManager && context.aiManager.vehicles.length > 0) {
+      const isNight = context.dayNightCycle ? context.dayNightCycle.isNight() : false
       context.aiManager.setRaceLocked(raceUpdate.isControlLocked)
-      const { playerRank, totalRacers } = context.aiManager.update(delta, context.vehicle)
+      const { playerRank, totalRacers } = context.aiManager.update(delta, context.vehicle, isNight)
       posText = `P${playerRank}/${totalRacers}`
     }
 

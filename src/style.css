@@ -138,6 +138,25 @@ body {
   background: rgba(239, 68, 68, 0.12);
 }
 
+.reset-btn.headlights-on {
+  border-color: rgba(56, 189, 248, 0.65);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+}
+
+.reset-btn.time-sunset {
+  border-color: rgba(249, 115, 22, 0.65);
+  color: #fb923c;
+  background: rgba(249, 115, 22, 0.16);
+}
+
+.reset-btn.time-night {
+  border-color: rgba(129, 140, 248, 0.65);
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.16);
+}
+
 .reset-key-hint {
   background: rgba(255, 255, 255, 0.15);
   padding: 2px 6px;

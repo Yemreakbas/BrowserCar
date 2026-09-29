@@ -55,6 +55,7 @@ export interface ModeHUDController {
 import type { DriftTrack } from '../world/DriftTrack.ts'
 import type { AudioManager } from '../audio/AudioManager.ts'
 import type { AIManager } from '../ai/AIManager.ts'
+import type { DayNightCycle } from '../effects/DayNightCycle.ts'
 
 export interface ModeContext {
   scene: THREE.Scene
@@ -68,6 +69,7 @@ export interface ModeContext {
   networkManager?: NetworkManager
   audio?: AudioManager
   aiManager?: AIManager
+  dayNightCycle?: DayNightCycle
 }
 
 export interface IGameMode {

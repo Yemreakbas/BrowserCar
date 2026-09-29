@@ -34,8 +34,10 @@ export class CityFreeRoamMode implements IGameMode {
   private tempCarVel = new THREE.Vector3()
 
   public onUpdate(delta: number, context: ModeContext): void {
-    // Update ambient city traffic
-    context.aiManager?.update(delta, context.vehicle)
+    // Update ambient city traffic & night street lighting
+    const isNight = context.dayNightCycle ? context.dayNightCycle.isNight() : false
+    context.cityWorld.setNightMode(isNight)
+    context.aiManager?.update(delta, context.vehicle, isNight)
 
     if (
       context.tireSmoke &&

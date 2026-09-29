@@ -12,6 +12,7 @@ import { CityFreeRoamMode } from './modes/CityFreeRoamMode.ts'
 import { RaceMode } from './modes/RaceMode.ts'
 import { DriftMode } from './modes/DriftMode.ts'
 import { AIManager } from './ai/AIManager.ts'
+import { DayNightCycle, type TimePreset } from './effects/DayNightCycle.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
@@ -99,6 +100,16 @@ app.innerHTML = `
           <span id="audio-btn-icon" style="font-size: 13px;">🔊</span>
           <span id="audio-btn-text">Ses</span>
           <span class="reset-key-hint">M</span>
+        </button>
+        <button id="btn-time" class="reset-btn" type="button" title="Gündüz / Gece Döngüsü ve Zamanı Değiştir (T)">
+          <span id="time-btn-icon" style="font-size: 13px;">☀️</span>
+          <span id="time-btn-text">Gündüz</span>
+          <span class="reset-key-hint">T</span>
+        </button>
+        <button id="btn-headlights" class="reset-btn" type="button" title="Araç Farlarını Aç / Kapat (H)">
+          <span id="headlights-btn-icon" style="font-size: 13px;">💡</span>
+          <span id="headlights-btn-text">Farlar</span>
+          <span class="reset-key-hint">H</span>
         </button>
       </div>
     </header>
@@ -847,6 +858,12 @@ const btnLeaderboards = document.querySelector<HTMLButtonElement>('#btn-leaderbo
 const btnAudio = document.querySelector<HTMLButtonElement>('#btn-audio')!
 const audioBtnIcon = document.querySelector<HTMLSpanElement>('#audio-btn-icon')!
 const audioBtnText = document.querySelector<HTMLSpanElement>('#audio-btn-text')!
+const btnTime = document.querySelector<HTMLButtonElement>('#btn-time')!
+const timeBtnIcon = document.querySelector<HTMLSpanElement>('#time-btn-icon')!
+const timeBtnText = document.querySelector<HTMLSpanElement>('#time-btn-text')!
+const btnHeadlights = document.querySelector<HTMLButtonElement>('#btn-headlights')!
+const headlightsBtnIcon = document.querySelector<HTMLSpanElement>('#headlights-btn-icon')!
+const headlightsBtnText = document.querySelector<HTMLSpanElement>('#headlights-btn-text')!
 const spawnBtnText = document.querySelector<HTMLSpanElement>('#spawn-btn-text')!
 const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
 const hudFpsBadge = document.querySelector<HTMLDivElement>('#hud-fps-badge')!
@@ -1439,6 +1456,48 @@ async function bootstrap() {
     toggleMute()
   })
 
+  // 7c. Initialize Day/Night Cycle & Headlights (Phase 31.3)
+  const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, hemisphereLight)
+
+  const updateTimeUI = (timeText: string, isNight: boolean, preset: TimePreset) => {
+    timeBtnText.textContent = timeText.split(' • ')[1] || 'Zaman'
+    timeBtnIcon.textContent = preset === 'NIGHT' ? '🌙' : preset === 'SUNSET' ? '🌅' : preset === 'DAWN' ? '🌄' : '☀️'
+    btnTime.classList.toggle('time-sunset', preset === 'SUNSET')
+    btnTime.classList.toggle('time-night', preset === 'NIGHT' || isNight)
+  }
+
+  dayNightCycle.onTimeChanged = (timeText, isNight, preset) => {
+    updateTimeUI(timeText, isNight, preset)
+  }
+
+  const cycleTimePreset = () => {
+    const presets: TimePreset[] = ['DAY', 'SUNSET', 'NIGHT', 'DAWN']
+    const nextIdx = (presets.indexOf(dayNightCycle.activePreset) + 1) % presets.length
+    const nextPreset = presets[nextIdx]
+    dayNightCycle.setPreset(nextPreset)
+    const presetNames: Record<TimePreset, string> = {
+      DAY: '☀️ Gündüz (12:00)',
+      SUNSET: '🌅 Gün Batımı (18:45)',
+      NIGHT: '🌙 Gece (23:30)',
+      DAWN: '🌄 Şafak (06:15)',
+    }
+    showResetToast(`Aydınlatma: ${presetNames[nextPreset]}`, 'info', 1300)
+    audioManager.playClick()
+  }
+
+  btnTime.addEventListener('click', cycleTimePreset)
+
+  const toggleHeadlights = () => {
+    const isOn = vehicle.toggleHeadlights()
+    headlightsBtnIcon.textContent = isOn ? '💡' : '🔦'
+    headlightsBtnText.textContent = isOn ? 'Açık' : 'Farlar'
+    btnHeadlights.classList.toggle('headlights-on', isOn)
+    showResetToast(isOn ? '💡 Farlar: AÇIK' : '🔦 Farlar: KAPALI', 'info', 1100)
+    audioManager.playClick()
+  }
+
+  btnHeadlights.addEventListener('click', toggleHeadlights)
+
   // 8. Initialize AI Manager & Mode Manager (Default: City Free Roam)
   const aiManager = new AIManager(scene)
   const modeManager = new ModeManager({
@@ -1453,6 +1512,7 @@ async function bootstrap() {
     networkManager,
     audio: audioManager,
     aiManager,
+    dayNightCycle,
   })
 
   // 8b. Initialize Polished Follow Camera System (Phase 20)
@@ -2841,6 +2901,12 @@ async function bootstrap() {
       case 'KeyL':
         toggleLeaderboardsModal()
         break
+      case 'KeyH':
+        toggleHeadlights()
+        break
+      case 'KeyT':
+        cycleTimePreset()
+        break
       case 'F3':
         e.preventDefault()
         toggleDetailedStats()
@@ -2928,11 +2994,15 @@ async function bootstrap() {
     lastTime = now
     const delta = Math.min(rawDelta, 0.05)
 
+    // 9.05 Day/Night Cycle & Atmosphere Update (Phase 31.3)
+    dayNightCycle.update(delta)
+    const isNight = dayNightCycle.isNight()
+
     // 9.1 Physics Simulation Step
     physicsWorld.step()
 
     // 9.2 Vehicle Dynamics Update
-    vehicle.update(delta, keys)
+    vehicle.update(delta, keys, isNight)
 
     // 9.2b Vehicle Reset & Out-Of-Bounds Fall / Flip Monitor (Phase 19)
     vehicleResetSystem.update(delta, keys)
@@ -3032,9 +3102,7 @@ async function bootstrap() {
     const shadowDistSq = carPos.distanceToSquared(lastShadowPos)
     if (shadowDistSq > 0.02) {
       lastShadowPos.copy(carPos)
-      sunLight.position.set(carPos.x + 40, 60, carPos.z + 30)
-      sunLight.target.position.copy(carPos)
-      sunLight.target.updateMatrixWorld()
+      dayNightCycle.updateShadowFollow(carPos)
     }
 
     // 9.5 Polished Third-Person Follow Camera (Phase 20)

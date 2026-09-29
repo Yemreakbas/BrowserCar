@@ -15,6 +15,8 @@ export class CityWorld {
   private modelCache: Map<string, THREE.Group> = new Map()
   public isLoaded: boolean = false
   private physicsWorld?: PhysicsWorld
+  private bulbMat: THREE.MeshStandardMaterial | null = null
+  private streetLightsGroup: THREE.Group | null = null
 
   // Road grid dimensions
   private readonly BLOCK_SIZE = 44.0
@@ -309,6 +311,8 @@ export class CityWorld {
       roughness: 0.2,
     })
 
+    this.bulbMat = bulbMat
+
     const lampPositions = [
       { x: -9.5, z: 9.5 },
       { x: 9.5, z: 9.5 },
@@ -348,6 +352,32 @@ export class CityWorld {
     lampGroup.matrixAutoUpdate = false
     lampGroup.updateMatrix()
     this.group.add(lampGroup)
+
+    // Warm street point lights for crossroads illumination at night
+    this.streetLightsGroup = new THREE.Group()
+    this.streetLightsGroup.name = 'CityNightStreetLights'
+    const intersectionPoints = [
+      { x: -9.5, y: 5.0, z: 9.5 },
+      { x: 9.5, y: 5.0, z: 9.5 },
+      { x: -9.5, y: 5.0, z: -9.5 },
+      { x: 9.5, y: 5.0, z: -9.5 },
+    ]
+    intersectionPoints.forEach((pt) => {
+      const light = new THREE.PointLight(0xffedd5, 1.6, 22, 1.4)
+      light.position.set(pt.x, pt.y, pt.z)
+      this.streetLightsGroup!.add(light)
+    })
+    this.streetLightsGroup.visible = false
+    this.group.add(this.streetLightsGroup)
+  }
+
+  public setNightMode(isNight: boolean) {
+    if (this.bulbMat) {
+      this.bulbMat.emissiveIntensity = isNight ? 4.5 : 1.2
+    }
+    if (this.streetLightsGroup) {
+      this.streetLightsGroup.visible = isNight
+    }
   }
 
   // --- 5. TREES & URBAN LANDSCAPING (Phase 6) ---

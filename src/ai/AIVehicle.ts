@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { ExhaustFlameVFX } from '../effects/ExhaustFlameVFX.ts'
+import { VehicleHeadlights } from '../effects/VehicleHeadlights.ts'
 
 export interface AIOptimizationConfig {
   id: string
@@ -32,6 +33,7 @@ export class AIVehicle {
   private placeholderMesh: THREE.Group | null = null
   private nameplateSprite: THREE.Sprite | null = null
   private flameVFX: ExhaustFlameVFX
+  public headlights: VehicleHeadlights
 
   // Physics & Kinematics
   public currentSpeed: number = 0
@@ -88,6 +90,7 @@ export class AIVehicle {
     this.root.add(this.bodyGroup)
 
     this.flameVFX = new ExhaustFlameVFX(this.bodyGroup)
+    this.headlights = new VehicleHeadlights(this.bodyGroup)
 
     this.createPlaceholder(config.color)
     this.createNameplate(config.color)
@@ -245,11 +248,13 @@ export class AIVehicle {
 
   public update(
     delta: number,
-    obstacles: Array<{ position: THREE.Vector3; speed: number; forward: THREE.Vector3; radius?: number }> = []
+    obstacles: Array<{ position: THREE.Vector3; speed: number; forward: THREE.Vector3; radius?: number }> = [],
+    isNight: boolean = false
   ) {
     if (this.isLocked) {
       this.currentSpeed = 0
       this.flameVFX.update(delta, false, 0)
+      this.headlights.update(delta, false, isNight)
       return
     }
 
@@ -407,12 +412,14 @@ export class AIVehicle {
       this.wheelBackRight.rotation.x = this.wheelSpinAngle
     }
 
-    // 9. Exhaust Flames
+    // 9. Exhaust Flames & Headlights
     this.flameVFX.update(delta, this.isNitro, this.currentSpeed)
+    this.headlights.update(delta, avoidanceBrake, isNight)
   }
 
   public destroy() {
     this.scene.remove(this.root)
     this.flameVFX.dispose()
+    this.headlights.dispose()
   }
 }

@@ -8,6 +8,7 @@ import {
   type VehicleDefinition,
 } from './VehicleDefinition.ts'
 import { NitroSystem } from './NitroSystem.ts'
+import { VehicleHeadlights } from '../effects/VehicleHeadlights.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 
 export interface VehicleInput {
@@ -64,6 +65,9 @@ export class Vehicle {
   public isNitroActive: boolean = false
   public nitroPercent: number = 100
 
+  // Headlights & Brake Lights System (Phase 31.3)
+  public headlights: VehicleHeadlights
+
   constructor(
     scene: THREE.Scene,
     physicsWorld: PhysicsWorld,
@@ -87,6 +91,9 @@ export class Vehicle {
 
     // Nitro System attached to body group (Phase 31)
     this.nitroSystem = new NitroSystem(this.bodyGroup)
+
+    // Headlights attached to body group (Phase 31.3)
+    this.headlights = new VehicleHeadlights(this.bodyGroup)
 
     // Temporary placeholder until Kenney model finishes loading
     this.createPlaceholder()
@@ -235,7 +242,7 @@ export class Vehicle {
     return this.activeDefinition
   }
 
-  public update(delta: number, keys: VehicleInput) {
+  public update(delta: number, keys: VehicleInput, isNight: boolean = false) {
     if (!this.rigidBody) return
 
     // 1. Sync Three.js Root Object from Rapier RigidBody
@@ -393,6 +400,10 @@ export class Vehicle {
 
     // Apply updated linear velocity (preserving natural Rapier gravity on Y)
     this.rigidBody.setLinvel({ x: newLinvelX, y: linvel.y, z: newLinvelZ }, true)
+
+    // 5.5 Headlights & Brake Lights Update (Phase 31.3)
+    const isBraking = !!(keys.handbrake || (keys.backward && forwardSpeed > 0.4))
+    this.headlights.update(delta, isBraking, isNight)
 
     // 6. Speed-Sensitive Steering
     // At low speeds, full steering angle is available for sharp 90-degree city turns.
@@ -584,5 +595,13 @@ export class Vehicle {
       const offsetR = new THREE.Vector3(0.75, 0.15, -1.15).applyQuaternion(this.root.quaternion)
       rightOut.copy(this.root.position).add(offsetR)
     }
+  }
+
+  public toggleHeadlights(): boolean {
+    return this.headlights.toggle()
+  }
+
+  public setHeadlights(enabled: boolean): void {
+    this.headlights.setHeadlights(enabled)
   }
 }
