@@ -102,6 +102,7 @@ export interface PlayerStateMessage {
   steering: number
   isBraking: boolean
   isDrifting: boolean
+  isNitro?: boolean
   sequence?: number
   isRespawn?: boolean
   inputs?: {
@@ -110,6 +111,7 @@ export interface PlayerStateMessage {
     left: boolean
     right: boolean
     handbrake: boolean
+    nitro?: boolean
   }
   timestamp: number
 }
@@ -125,6 +127,7 @@ export interface AuthoritativePlayerState {
   steering: number
   isBraking: boolean
   isDrifting: boolean
+  isNitro?: boolean
   lastProcessedSequence: number
   isRespawn?: boolean
   timestamp: number

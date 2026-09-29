@@ -392,6 +392,7 @@ export class RoomManager {
       steering: Number.isFinite(state.steering) ? Math.max(-0.65, Math.min(0.65, state.steering)) : 0,
       isBraking: !!state.isBraking,
       isDrifting: !!state.isDrifting,
+      isNitro: !!state.isNitro,
       lastProcessedSequence: state.sequence || 0,
       isRespawn: !!state.isRespawn,
       timestamp: Date.now(),

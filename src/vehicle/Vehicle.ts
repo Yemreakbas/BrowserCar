@@ -7,6 +7,7 @@ import {
   getVehicleDefinition,
   type VehicleDefinition,
 } from './VehicleDefinition.ts'
+import { NitroSystem } from './NitroSystem.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 
 export interface VehicleInput {
@@ -15,6 +16,7 @@ export interface VehicleInput {
   left: boolean
   right: boolean
   handbrake: boolean
+  nitro?: boolean
 }
 
 export class Vehicle {
@@ -57,6 +59,11 @@ export class Vehicle {
   public driftDuration: number = 0 // Seconds continuously drifting
   public currentLateralSpeed: number = 0
 
+  // Nitro System State & Boost Telemetry (Phase 31)
+  public nitroSystem: NitroSystem
+  public isNitroActive: boolean = false
+  public nitroPercent: number = 100
+
   constructor(
     scene: THREE.Scene,
     physicsWorld: PhysicsWorld,
@@ -77,6 +84,9 @@ export class Vehicle {
     this.bodyGroup = new THREE.Group()
     this.bodyGroup.name = 'VehicleBodyGroup'
     this.root.add(this.bodyGroup)
+
+    // Nitro System attached to body group (Phase 31)
+    this.nitroSystem = new NitroSystem(this.bodyGroup)
 
     // Temporary placeholder until Kenney model finishes loading
     this.createPlaceholder()
@@ -288,6 +298,21 @@ export class Vehicle {
     let newLinvelX = linvel.x - right.x * lateralSpeed * lateralDamping
     let newLinvelZ = linvel.z - right.z * lateralSpeed * lateralDamping
 
+    // 4.9 Nitro System Dynamics & Flame Simulation (Phase 31)
+    const nitroResult = this.nitroSystem.update(
+      delta,
+      !!keys.nitro,
+      keys.forward,
+      this.isDrifting,
+      forwardSpeed
+    )
+    this.isNitroActive = nitroResult.isBoosting
+    this.nitroPercent = this.nitroSystem.getPercent()
+
+    const effectiveMaxSpeed = this.isNitroActive
+      ? this.config.maxForwardSpeed * nitroResult.topSpeedMultiplier
+      : this.config.maxForwardSpeed
+
     // 5. Powertrain Dynamics (Throttle, Reverse, Foot Brake & Handbrake)
     let impulse = 0
 
@@ -295,7 +320,7 @@ export class Vehicle {
       if (forwardSpeed < -0.2) {
         // Foot brake while moving backwards
         impulse += this.config.brakingPower * delta
-      } else if (forwardSpeed < this.config.maxForwardSpeed) {
+      } else if (forwardSpeed < effectiveMaxSpeed) {
         if (this.isDrifting || keys.handbrake) {
           // Power-slide throttle: delivers continuous drive thrust to power through corners
           impulse += this.config.baseAcceleration * 0.92 * delta
@@ -306,6 +331,11 @@ export class Vehicle {
             Math.pow(1 - speedRatio, this.config.accelerationCurvePower) * 0.75 + 0.25
           impulse += this.config.baseAcceleration * torqueFactor * delta
         }
+      }
+
+      // Apply Nitro Boost Thrust
+      if (this.isNitroActive) {
+        impulse += nitroResult.impulse
       }
     } else if (keys.backward) {
       if (forwardSpeed > 0.3) {

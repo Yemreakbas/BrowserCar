@@ -9,6 +9,7 @@ export interface DrivingAudioState {
   isBraking: boolean
   isDrifting: boolean
   slipAngleRad: number
+  isNitro?: boolean
 }
 
 export type SoundKey =
@@ -44,6 +45,12 @@ export class AudioManager {
 
   // Brake audio throttle
   private lastBrakeSoundTime: number = 0
+
+  // Nitro boost audio nodes (Phase 31)
+  private nitroNoiseSource: AudioBufferSourceNode | null = null
+  private nitroGain: GainNode | null = null
+  private nitroFilter: BiquadFilterNode | null = null
+  private isNitroAudioRunning: boolean = false
 
   // Asset buffer storage
   private audioBuffers: Map<SoundKey, AudioBuffer> = new Map()
@@ -248,6 +255,39 @@ export class AudioManager {
   }
 
   /**
+   * Starts looping procedural white-noise bandpass node for supersonic nitro hiss (Phase 31)
+   */
+  private startNitroLoop(): void {
+    if (!this.ctx || !this.sfxGain || this.isNitroAudioRunning) return
+    const now = this.ctx.currentTime
+
+    const bufferSize = Math.floor(this.ctx.sampleRate * 1.0)
+    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate)
+    const output = noiseBuffer.getChannelData(0)
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1
+    }
+
+    this.nitroFilter = this.ctx.createBiquadFilter()
+    this.nitroFilter.type = 'bandpass'
+    this.nitroFilter.frequency.setValueAtTime(2200, now)
+    this.nitroFilter.Q.setValueAtTime(2.2, now)
+    this.nitroFilter.connect(this.sfxGain)
+
+    this.nitroGain = this.ctx.createGain()
+    this.nitroGain.gain.setValueAtTime(0.0, now)
+    this.nitroGain.connect(this.nitroFilter)
+
+    this.nitroNoiseSource = this.ctx.createBufferSource()
+    this.nitroNoiseSource.buffer = noiseBuffer
+    this.nitroNoiseSource.loop = true
+    this.nitroNoiseSource.connect(this.nitroGain)
+    this.nitroNoiseSource.start()
+
+    this.isNitroAudioRunning = true
+  }
+
+  /**
    * Continuously updates vehicle driving audio parameters based on physics state
    */
   public updateDrivingAudio(state: DrivingAudioState): void {
@@ -305,6 +345,21 @@ export class AudioManager {
       if (now - this.lastBrakeSoundTime > 0.65) {
         this.lastBrakeSoundTime = now
         this.playBrake(Math.min(absSpeed / 70, 1.0))
+      }
+    }
+
+    // 6. Procedural Nitro Boost Jet Audio (Phase 31)
+    if (state.isNitro) {
+      if (!this.isNitroAudioRunning) {
+        this.startNitroLoop()
+      }
+      if (this.nitroGain && this.nitroFilter) {
+        this.nitroGain.gain.setTargetAtTime(0.55, now, 0.04)
+        this.nitroFilter.frequency.setTargetAtTime(2400 + speedRatio * 900, now, 0.05)
+      }
+    } else {
+      if (this.nitroGain) {
+        this.nitroGain.gain.setTargetAtTime(0.0, now, 0.12)
       }
     }
   }

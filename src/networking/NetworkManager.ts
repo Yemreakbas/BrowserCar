@@ -406,6 +406,7 @@ export class NetworkManager {
     steering: number
     isBraking: boolean
     isDrifting: boolean
+    isNitro?: boolean
     isRespawn?: boolean
     inputs?: {
       forward: boolean
@@ -413,6 +414,7 @@ export class NetworkManager {
       left: boolean
       right: boolean
       handbrake: boolean
+      nitro?: boolean
     }
   }): void {
     if (!this.socket || !this.socket.connected || !this.localPlayerId || !this.currentRoom) return
@@ -430,6 +432,7 @@ export class NetworkManager {
       steering: data.steering,
       isBraking: data.isBraking,
       isDrifting: data.isDrifting,
+      isNitro: data.isNitro,
       sequence: this.sequenceNumber,
       isRespawn: data.isRespawn,
       inputs: data.inputs,

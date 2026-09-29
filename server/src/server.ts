@@ -352,6 +352,7 @@ io.on('connection', socket => {
         steering: 0,
         isBraking: false,
         isDrifting: false,
+        isNitro: false,
         isRespawn: true,
         lastProcessedSequence: 0,
         timestamp: Date.now(),

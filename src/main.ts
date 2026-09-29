@@ -193,6 +193,16 @@ app.innerHTML = `
         <div class="speed-bar-track">
           <div id="hud-speed-bar" class="speed-bar-fill"></div>
         </div>
+        <!-- Nitro Boost Gauge (Phase 31) -->
+        <div id="hud-nitro-container" class="nitro-gauge-container">
+          <div class="nitro-gauge-header">
+            <span class="nitro-label">⚡ NITRO <span class="nitro-key-hint">[SHIFT / N]</span></span>
+            <span id="hud-nitro-val" class="nitro-percent">100%</span>
+          </div>
+          <div class="nitro-bar-track">
+            <div id="hud-nitro-bar" class="nitro-bar-fill" style="width: 100%;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Dedicated City Free Roam HUD Card (Phase 21) -->
@@ -283,6 +293,8 @@ app.innerHTML = `
         </div>
         <div class="controls-legend">
           <span>Modlar: ESC</span>
+          <span>•</span>
+          <span>Nitro: Shift/N</span>
           <span>•</span>
           <span>Kamera: V</span>
           <span>•</span>
@@ -818,6 +830,9 @@ app.innerHTML = `
 const hudSpeed = document.querySelector<HTMLSpanElement>('#hud-speed')!
 const hudGear = document.querySelector<HTMLSpanElement>('#hud-gear')!
 const hudSpeedBar = document.querySelector<HTMLDivElement>('#hud-speed-bar')!
+const hudNitroBar = document.querySelector<HTMLDivElement>('#hud-nitro-bar')!
+const hudNitroVal = document.querySelector<HTMLSpanElement>('#hud-nitro-val')!
+const hudNitroContainer = document.querySelector<HTMLDivElement>('#hud-nitro-container')!
 const keyW = document.querySelector<HTMLDivElement>('#key-w')!
 const keyA = document.querySelector<HTMLDivElement>('#key-a')!
 const keyS = document.querySelector<HTMLDivElement>('#key-s')!
@@ -2709,6 +2724,7 @@ async function bootstrap() {
     left: false,
     right: false,
     handbrake: false,
+    nitro: false,
   }
 
   window.addEventListener('keydown', (e) => {
@@ -2758,6 +2774,11 @@ async function bootstrap() {
       case 'ArrowRight':
         keys.right = true
         keyD.classList.add('active')
+        break
+      case 'KeyN':
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        keys.nitro = true
         break
       case 'Space': {
         const activeMode = modeManager.getActiveMode()
@@ -2846,6 +2867,11 @@ async function bootstrap() {
         keys.right = false
         keyD.classList.remove('active')
         break
+      case 'KeyN':
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        keys.nitro = false
+        break
       case 'Space':
         keys.handbrake = false
         break
@@ -2925,6 +2951,7 @@ async function bootstrap() {
       isBraking,
       isDrifting: vehicle.isDrifting,
       slipAngleRad: vehicle.slipAngle,
+      isNitro: vehicle.isNitroActive,
     })
 
     // 9.3 Active Game Mode Update
@@ -2984,12 +3011,14 @@ async function bootstrap() {
           steering: vehicle.currentSteerAngle,
           isBraking: keys.backward,
           isDrifting: vehicle.isDrifting,
+          isNitro: vehicle.isNitroActive,
           inputs: {
             forward: keys.forward,
             backward: keys.backward,
             left: keys.left,
             right: keys.right,
             handbrake: keys.handbrake,
+            nitro: keys.nitro,
           },
         })
       }
@@ -3008,11 +3037,22 @@ async function bootstrap() {
     // 9.5 Polished Third-Person Follow Camera (Phase 20)
     followCamera.update(delta)
 
-    // 9.6 HUD Speedometer & Gear Update
+    // 9.6 HUD Speedometer, Gear & Nitro Gauge Update (Phase 31)
     hudSpeed.textContent = speedKmh.toString()
 
     const speedPercent = Math.min(speedKmh / (vehicle.config.maxForwardSpeed * 3.6), 1.0) * 100
     hudSpeedBar.style.width = `${speedPercent}%`
+
+    if (hudNitroBar) {
+      hudNitroBar.style.width = `${Math.max(0, Math.min(100, vehicle.nitroPercent))}%`
+    }
+    if (hudNitroVal) {
+      hudNitroVal.textContent = vehicle.isNitroActive ? 'BOOST!' : `${Math.round(vehicle.nitroPercent)}%`
+    }
+    if (hudNitroContainer) {
+      hudNitroContainer.classList.toggle('nitro-active', vehicle.isNitroActive)
+      hudNitroContainer.classList.toggle('nitro-empty', vehicle.nitroPercent < 6)
+    }
 
     if (Math.abs(vehicle.currentSpeed) < 0.2) {
       hudGear.textContent = 'N'

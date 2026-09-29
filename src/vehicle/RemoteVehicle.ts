@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { PlayerStateMessage } from '../../shared/src/messages.ts'
+import { ExhaustFlameVFX } from '../effects/ExhaustFlameVFX.ts'
 
 export const REMOTE_CAR_COLORS = [
   0xef4444, // Vibrant Red
@@ -52,6 +53,8 @@ export class RemoteVehicle {
   private targetSteering: number = 0
   public isBraking: boolean = false
   public isDrifting: boolean = false
+  public isNitro: boolean = false
+  private flameVFX: ExhaustFlameVFX
   private wheelSpinAngle: number = 0
 
   private carColor: number
@@ -79,6 +82,7 @@ export class RemoteVehicle {
 
     this.createPlaceholder()
     this.createNameplate()
+    this.flameVFX = new ExhaustFlameVFX(this.root)
     this.loadKenneyModel('/assets/cars/sedan-sports.glb')
 
     this.scene.add(this.root)
@@ -264,6 +268,8 @@ export class RemoteVehicle {
     this.targetSteering = state.steering || 0
     this.isBraking = !!state.isBraking
     this.isDrifting = !!state.isDrifting
+    this.isNitro = !!(state as any).isNitro
+    this.flameVFX.setActive(this.isNitro)
 
     // Instant snapping on respawn to avoid lerping across the map (Phase 19)
     if ((state as any).isRespawn) {
@@ -322,9 +328,13 @@ export class RemoteVehicle {
     if (this.wheelBackRight) {
       this.wheelBackRight.rotation.x = this.wheelSpinAngle
     }
+
+    // Update flame effects for remote player (Phase 31)
+    this.flameVFX.update(delta, this.isNitro ? 1.0 : 0.0)
   }
 
   public destroy() {
+    this.flameVFX.dispose()
     this.scene.remove(this.root)
 
     // Dispose nameplate sprite and its canvas texture

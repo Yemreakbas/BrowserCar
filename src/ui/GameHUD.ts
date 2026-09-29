@@ -22,6 +22,9 @@ export class GameHUD implements ModeHUDController {
   private hudSpeed: HTMLElement | null
   private hudGear: HTMLElement | null
   private hudSpeedBar: HTMLElement | null
+  private hudNitroBar: HTMLElement | null
+  private hudNitroVal: HTMLElement | null
+  private hudNitroContainer: HTMLElement | null
 
   // Action Buttons
   private btnSpawn: HTMLElement | null
@@ -78,6 +81,9 @@ export class GameHUD implements ModeHUDController {
     this.hudSpeed = document.getElementById('hud-speed')
     this.hudGear = document.getElementById('hud-gear')
     this.hudSpeedBar = document.getElementById('hud-speed-bar')
+    this.hudNitroBar = document.getElementById('hud-nitro-bar')
+    this.hudNitroVal = document.getElementById('hud-nitro-val')
+    this.hudNitroContainer = document.getElementById('hud-nitro-container')
 
     this.btnSpawn = document.getElementById('btn-spawn')
     this.spawnBtnText = document.getElementById('spawn-btn-text')
@@ -167,6 +173,27 @@ export class GameHUD implements ModeHUDController {
       } else {
         this.hudGear.className = 'gear-badge'
       }
+    }
+  }
+
+  // --- NITRO GAUGE (Phase 31) ---
+  public updateNitro(percent: number, isActive: boolean): void {
+    if (this.hudNitroBar) {
+      const clamped = Math.max(0, Math.min(100, percent))
+      this.hudNitroBar.style.width = `${clamped}%`
+    }
+
+    if (this.hudNitroVal) {
+      if (isActive) {
+        this.hudNitroVal.textContent = 'BOOST!'
+      } else {
+        this.hudNitroVal.textContent = `${Math.round(percent)}%`
+      }
+    }
+
+    if (this.hudNitroContainer) {
+      this.hudNitroContainer.classList.toggle('nitro-active', isActive)
+      this.hudNitroContainer.classList.toggle('nitro-empty', percent < 6)
     }
   }
 

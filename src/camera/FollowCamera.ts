@@ -225,10 +225,12 @@ export class FollowCamera {
     this.currentPosition.lerp(this.tempTargetPos, posAlpha)
     this.currentLookAt.lerp(this.tempTargetLookAt, lookAtAlpha)
 
-    // 7. Dynamic High-Speed FOV Scaling
-    const targetFov = this.config.baseFov + this.config.speedFovBoost * Math.pow(speedRatio, 1.2)
+    // 7. Dynamic High-Speed & Nitro Boost FOV Scaling (Phase 31)
+    const nitroFovKick = (this.vehicle as any).isNitroActive ? 8.5 : 0
+    const targetFov = this.config.baseFov + this.config.speedFovBoost * Math.pow(speedRatio, 1.2) + nitroFovKick
+    const fovLerpRate = (this.vehicle as any).isNitroActive ? 12.0 : 6.0
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
-      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.exp(-6.0 * delta))
+      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.exp(-fovLerpRate * delta))
       this.camera.updateProjectionMatrix()
     }
 
@@ -268,8 +270,9 @@ export class FollowCamera {
     this.tempForward.set(Math.sin(yaw), 0, Math.cos(yaw))
     this.tempRight.set(-Math.cos(yaw), 0, Math.sin(yaw))
 
-    // Distance stretch & height drop at speed
-    const effectiveDistance = this.config.distance + this.config.speedDistanceStretch * speedRatio
+    // Distance stretch & height drop at speed (with extra stretch during nitro boost)
+    const nitroStretch = (this.vehicle as any).isNitroActive ? 0.65 : 0
+    const effectiveDistance = this.config.distance + this.config.speedDistanceStretch * speedRatio + nitroStretch
     const effectiveHeight = this.config.height + this.config.speedHeightOffset * speedRatio
 
     // Target camera position behind car
