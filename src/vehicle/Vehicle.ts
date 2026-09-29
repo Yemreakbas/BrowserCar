@@ -294,9 +294,32 @@ export class Vehicle {
       1 - Math.exp(-gripLerpRate * delta)
     )
 
-    const lateralDamping = Math.min(delta * 22.0 * this.currentTraction, 0.94)
+    const lateralDamping = Math.min(delta * 24.0 * this.currentTraction, 0.95)
     let newLinvelX = linvel.x - right.x * lateralSpeed * lateralDamping
     let newLinvelZ = linvel.z - right.z * lateralSpeed * lateralDamping
+
+    // Dynamic cornering tracking: smoothly aligns velocity vector with car heading during normal grip driving
+    if (!this.isDrifting && !keys.handbrake && absForward > 0.15) {
+      const currentPlanarSpeed = Math.sqrt(newLinvelX * newLinvelX + newLinvelZ * newLinvelZ)
+      const targetVelX = forward.x * forwardSpeed
+      const targetVelZ = forward.z * forwardSpeed
+      const alignRate = Math.min(delta * 14.0 * this.currentTraction, 0.85)
+      newLinvelX = THREE.MathUtils.lerp(newLinvelX, targetVelX, alignRate)
+      newLinvelZ = THREE.MathUtils.lerp(newLinvelZ, targetVelZ, alignRate)
+
+      // Active front wheel cornering pull along steer angle
+      const corneringRedirect = Math.sin(this.currentSteerAngle) * forwardSpeed * delta * 3.2
+      newLinvelX -= right.x * corneringRedirect
+      newLinvelZ -= right.z * corneringRedirect
+
+      // Conserve kinetic energy smoothly through corners
+      const newPlanarSpeed = Math.sqrt(newLinvelX * newLinvelX + newLinvelZ * newLinvelZ)
+      if (newPlanarSpeed > 0.05 && currentPlanarSpeed > 0.05) {
+        const speedRatio = THREE.MathUtils.lerp(1.0, currentPlanarSpeed / newPlanarSpeed, 0.7)
+        newLinvelX *= speedRatio
+        newLinvelZ *= speedRatio
+      }
+    }
 
     // 4.9 Nitro System Dynamics & Flame Simulation (Phase 31)
     const nitroResult = this.nitroSystem.update(
@@ -398,8 +421,8 @@ export class Vehicle {
     )
 
     // Apply Yaw Angular Velocity
-    if (absForward > 0.08) {
-      const speedThreshold = forwardSpeed >= 0 ? 4.8 : 2.5
+    if (absForward > 0.04) {
+      const speedThreshold = 0.75 // Full steering authority reached at ~2.7 km/h for effortless turning
       const speedFactor = Math.min(absForward / speedThreshold, 1.0)
       const directionSign = forwardSpeed >= 0 ? 1 : -1
 

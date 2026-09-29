@@ -50,12 +50,12 @@ export const DEFAULT_VEHICLE_CONFIG: VehicleConfig = {
   handbrakePower: 4.0, // Balanced slide drag without killing drift momentum
   coastingDrag: 5.5, // Smooth deceleration when coasting
 
-  maxSteerAngle: 0.48, // ~27.5 degrees at low speed
-  minSteerSensitivity: 0.38, // High-speed steering stability
-  steeringSpeedDropoff: 16.0, // Natural gradual steering transition
-  steerResponseSpeed: 7.2, // Responsive wheel turning
-  steerReturnSpeed: 8.8, // Rapid centering
-  baseTurnRate: 2.2, // Dynamic yaw response
+  maxSteerAngle: 0.58, // ~33.2 degrees - nimble, comfortable turn-in radius
+  minSteerSensitivity: 0.65, // Retains high responsiveness even at high speed
+  steeringSpeedDropoff: 26.0, // Smooth, gradual high-speed transition
+  steerResponseSpeed: 11.5, // Crisp, instant steering reaction
+  steerReturnSpeed: 12.0, // Snappy centering
+  baseTurnRate: 3.4, // Responsive, agile yaw rotation rate
 
   lateralGripNormal: 0.94, // Solid grip tracking wheels for normal driving
   lateralGripDrift: 0.20, // Low lateral grip allowing long, beautiful arcade slides
