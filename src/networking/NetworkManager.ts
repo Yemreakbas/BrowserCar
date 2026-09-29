@@ -37,11 +37,23 @@ import type {
 } from '../../shared/src/messages.ts'
 import { PlayerProfileManager } from '../profile/PlayerProfile.ts'
 
+function resolveDefaultServerUrl(): string {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search)
+    const urlParam = params.get('server')
+    if (urlParam) return urlParam
+  }
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SERVER_URL) {
+    return (import.meta as any).env.VITE_SERVER_URL as string
+  }
+  return DEFAULT_SERVER_URL
+}
+
 export type NetworkStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 export class NetworkManager {
   private socket: Socket | null = null
-  private serverUrl: string = DEFAULT_SERVER_URL
+  private serverUrl: string
 
   private status: NetworkStatus = 'disconnected'
   private localPlayerId: string | null = null
@@ -100,8 +112,12 @@ export class NetworkManager {
   // Leaderboard listeners (Phase 25)
   private leaderboardUpdateListeners = new Set<(payload: LeaderboardAllPayload) => void>()
 
-  constructor(serverUrl: string = DEFAULT_SERVER_URL) {
+  constructor(serverUrl: string = resolveDefaultServerUrl()) {
     this.serverUrl = serverUrl
+  }
+
+  public getServerUrl(): string {
+    return this.serverUrl
   }
 
   public connect(url?: string): void {

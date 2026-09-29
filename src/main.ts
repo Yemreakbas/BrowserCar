@@ -1398,6 +1398,7 @@ async function bootstrap() {
 
   // 7. Initialize Multiplayer Network Manager
   const networkManager = new NetworkManager()
+  if (mpStatusSub) mpStatusSub.textContent = `URL: ${networkManager.getServerUrl()}`
   const remotePlayerManager = new RemotePlayerManager(scene, networkManager)
 
   // 7b. Initialize Driving Audio Manager (Phase 22)
@@ -2272,7 +2273,7 @@ async function bootstrap() {
       hudNetId.textContent = `#${playerId}`
 
       mpStatusTitle.textContent = 'Çok Oyunculu Sunucuya Bağlandı'
-      mpStatusSub.textContent = `WebSocket Aktif • Sunucu: http://localhost:3001`
+      mpStatusSub.textContent = `WebSocket Aktif • Sunucu: ${networkManager.getServerUrl()}`
       mpPlayerIdBadge.style.display = 'flex'
       mpPlayerIdText.textContent = playerId
       mpPingBadge.style.display = 'flex'
@@ -2291,7 +2292,7 @@ async function bootstrap() {
       hudNetText.textContent = 'Bağlanıyor...'
       hudNetId.style.display = 'none'
       mpStatusTitle.textContent = 'Sunucuya Bağlanılıyor...'
-      mpStatusSub.textContent = 'WebSocket el sıkışması başlatıldı...'
+      mpStatusSub.textContent = `WebSocket el sıkışması başlatıldı (${networkManager.getServerUrl()})...`
       mpPlayerIdBadge.style.display = 'none'
       mpPingBadge.style.display = 'none'
       btnMpReconnect.style.display = 'none'
@@ -2299,7 +2300,7 @@ async function bootstrap() {
       hudNetText.textContent = 'Çevrimdışı'
       hudNetId.style.display = 'none'
       mpStatusTitle.textContent = 'Sunucu Bağlantısı Yok'
-      mpStatusSub.textContent = 'Yerel sunucu (localhost:3001) çalışmıyor olabilir.'
+      mpStatusSub.textContent = `Sunucuya (${networkManager.getServerUrl()}) bağlanılamadı.`
       mpPlayerIdBadge.style.display = 'none'
       mpPingBadge.style.display = 'none'
       btnMpReconnect.style.display = 'inline-block'

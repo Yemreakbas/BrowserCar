@@ -9,11 +9,11 @@
     "build": "tsc"
   },
   "dependencies": {
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "tsx": "^4.19.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
-    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   }
 }
