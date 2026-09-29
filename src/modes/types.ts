@@ -56,6 +56,7 @@ import type { DriftTrack } from '../world/DriftTrack.ts'
 import type { AudioManager } from '../audio/AudioManager.ts'
 import type { AIManager } from '../ai/AIManager.ts'
 import type { DayNightCycle } from '../effects/DayNightCycle.ts'
+import type { WeatherSystem } from '../effects/WeatherSystem.ts'
 
 export interface ModeContext {
   scene: THREE.Scene
@@ -70,7 +71,9 @@ export interface ModeContext {
   audio?: AudioManager
   aiManager?: AIManager
   dayNightCycle?: DayNightCycle
+  weatherSystem?: WeatherSystem
 }
+
 
 export interface IGameMode {
   readonly modeType: GameModeType

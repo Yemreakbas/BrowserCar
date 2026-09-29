@@ -17,6 +17,7 @@ export class CityWorld {
   private physicsWorld?: PhysicsWorld
   private bulbMat: THREE.MeshStandardMaterial | null = null
   private streetLightsGroup: THREE.Group | null = null
+  private tarmacMat: THREE.MeshStandardMaterial | null = null
 
   // Road grid dimensions
   private readonly BLOCK_SIZE = 44.0
@@ -156,12 +157,12 @@ export class CityWorld {
     // Main Asphalt Grid
     const tarmacSize = 190
     const tarmacGeo = new THREE.PlaneGeometry(tarmacSize, tarmacSize)
-    const tarmacMat = new THREE.MeshStandardMaterial({
+    this.tarmacMat = new THREE.MeshStandardMaterial({
       color: 0x181a1f, // Rich dark asphalt
       roughness: 0.82,
       metalness: 0.15,
     })
-    const tarmac = new THREE.Mesh(tarmacGeo, tarmacMat)
+    const tarmac = new THREE.Mesh(tarmacGeo, this.tarmacMat)
     tarmac.rotation.x = -Math.PI / 2
     tarmac.position.y = 0.0
     tarmac.receiveShadow = true
@@ -169,6 +170,11 @@ export class CityWorld {
     tarmac.updateMatrix()
     this.group.add(tarmac)
   }
+
+  public getAsphaltMaterials(): THREE.MeshStandardMaterial[] {
+    return this.tarmacMat ? [this.tarmacMat] : []
+  }
+
 
   // --- 2. RAISED SIDEWALKS ---
   private createSidewalks() {

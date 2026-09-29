@@ -52,6 +52,14 @@ export class AudioManager {
   private nitroFilter: BiquadFilterNode | null = null
   private isNitroAudioRunning: boolean = false
 
+  // Weather ambience audio nodes (Phase 31.4)
+  private rainNoiseSource: AudioBufferSourceNode | null = null
+  private rainGain: GainNode | null = null
+  private rainFilter: BiquadFilterNode | null = null
+  private isRainAudioRunning: boolean = false
+  private currentRainIntensity: number = 0
+
+
   // Asset buffer storage
   private audioBuffers: Map<SoundKey, AudioBuffer> = new Map()
   private isUnlocked: boolean = false
@@ -138,6 +146,10 @@ export class AudioManager {
       this.loadAllAssets().then(() => {
         this.startEngineLoops()
         this.startSkidLoop()
+        if (this.currentRainIntensity > 0 && !this.isRainAudioRunning) {
+          this.startRainLoop()
+          this.setRainIntensity(this.currentRainIntensity)
+        }
       }).catch(() => {})
 
       return true
@@ -286,6 +298,116 @@ export class AudioManager {
 
     this.isNitroAudioRunning = true
   }
+
+  /**
+   * Starts looping procedural white-noise bandpass node for falling rain ambience (Phase 31.4)
+   */
+  private startRainLoop(): void {
+    if (!this.ctx || !this.masterGain || this.isRainAudioRunning) return
+    const now = this.ctx.currentTime
+
+    // 2-second pinkish filtered noise buffer
+    const bufferSize = Math.floor(this.ctx.sampleRate * 2.0)
+    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate)
+    const output = noiseBuffer.getChannelData(0)
+    let lastOut = 0.0
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1
+      lastOut = (lastOut + 0.02 * white) / 1.02
+      output[i] = lastOut * 3.5 + white * 0.08
+    }
+
+    this.rainFilter = this.ctx.createBiquadFilter()
+    this.rainFilter.type = 'lowpass'
+    this.rainFilter.frequency.setValueAtTime(1100, now)
+    this.rainFilter.connect(this.masterGain)
+
+    this.rainGain = this.ctx.createGain()
+    this.rainGain.gain.setValueAtTime(0.0, now)
+    this.rainGain.connect(this.rainFilter)
+
+    this.rainNoiseSource = this.ctx.createBufferSource()
+    this.rainNoiseSource.buffer = noiseBuffer
+    this.rainNoiseSource.loop = true
+    this.rainNoiseSource.connect(this.rainGain)
+    this.rainNoiseSource.start()
+
+    this.isRainAudioRunning = true
+  }
+
+  /**
+   * Sets continuous rain audio intensity (0.0 = silent, 1.0 = heavy storm)
+   */
+  public setRainIntensity(intensity: number): void {
+    this.currentRainIntensity = Math.max(0, Math.min(1, intensity))
+    if (!this.ctx || !this.isUnlocked || this.isMuted) return
+
+    if (this.currentRainIntensity > 0 && !this.isRainAudioRunning) {
+      this.startRainLoop()
+    }
+
+    if (this.rainGain && this.ctx) {
+      const now = this.ctx.currentTime
+      const targetGain = this.currentRainIntensity * 0.35
+      this.rainGain.gain.setTargetAtTime(targetGain, now, 0.3)
+    }
+
+    if (this.rainFilter && this.ctx) {
+      const now = this.ctx.currentTime
+      const targetFreq = 850 + this.currentRainIntensity * 950
+      this.rainFilter.frequency.setTargetAtTime(targetFreq, now, 0.3)
+    }
+  }
+
+  /**
+   * Synthesizes atmospheric rolling thunder rumble with sub-bass sweeps and echoing decay (Phase 31.4)
+   */
+  public playThunder(intensity: number = 1.0): void {
+    if (!this.ctx || !this.sfxGain || !this.isUnlocked || this.isMuted) return
+    const now = this.ctx.currentTime
+
+    // 1. Deep Sub-Bass Rumble
+    const subOsc = this.ctx.createOscillator()
+    const subGain = this.ctx.createGain()
+    subOsc.type = 'sine'
+    subOsc.frequency.setValueAtTime(65, now)
+    subOsc.frequency.exponentialRampToValueAtTime(24, now + 2.8)
+
+    const baseVol = Math.min(0.7 * intensity, 0.9)
+    subGain.gain.setValueAtTime(0.01, now)
+    subGain.gain.linearRampToValueAtTime(baseVol, now + 0.12)
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 2.8)
+
+    subOsc.connect(subGain)
+    subGain.connect(this.sfxGain)
+    subOsc.start(now)
+    subOsc.stop(now + 2.85)
+
+    // 2. Rolling Distant Thunder Noise Texture
+    const bufferSize = Math.floor(this.ctx.sampleRate * 2.2)
+    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate)
+    const data = noiseBuffer.getChannelData(0)
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 1.1))
+    }
+
+    const noiseFilter = this.ctx.createBiquadFilter()
+    noiseFilter.type = 'lowpass'
+    noiseFilter.frequency.setValueAtTime(280, now)
+    noiseFilter.frequency.linearRampToValueAtTime(110, now + 2.2)
+
+    const noiseGain = this.ctx.createGain()
+    noiseGain.gain.setValueAtTime(baseVol * 0.75, now + 0.05)
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 2.2)
+
+    const noiseSource = this.ctx.createBufferSource()
+    noiseSource.buffer = noiseBuffer
+    noiseSource.connect(noiseFilter)
+    noiseFilter.connect(noiseGain)
+    noiseGain.connect(this.sfxGain)
+    noiseSource.start(now + 0.05)
+  }
+
 
   /**
    * Continuously updates vehicle driving audio parameters based on physics state
@@ -643,6 +765,10 @@ export class AudioManager {
   }
 
   public dispose(): void {
+    if (this.rainNoiseSource) {
+      try { this.rainNoiseSource.stop() } catch {}
+      this.rainNoiseSource = null
+    }
     if (this.ctx) {
       this.ctx.close().catch(() => {})
       this.ctx = null

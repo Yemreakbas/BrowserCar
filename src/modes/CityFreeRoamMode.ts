@@ -25,7 +25,9 @@ export class CityFreeRoamMode implements IGameMode {
 
     this.applySpawn(context, this.currentSpawnIndex)
     context.aiManager?.initCityTraffic(context.cityWorld)
+    context.weatherSystem?.registerAsphaltMaterials(context.cityWorld.getAsphaltMaterials())
   }
+
 
   private smokeTimer = 0
   private cityHudTimer = 0

@@ -40,6 +40,7 @@ export class RaceMode implements IGameMode {
     context.cityWorld.group.visible = false
     context.raceTrack.setVisible(true)
     context.driftTrack.setVisible(false)
+    context.weatherSystem?.registerAsphaltMaterials(context.raceTrack.getAsphaltMaterials())
 
     context.hud.setTelemetryVisible(true)
     context.hud.setDriftCardVisible(false)

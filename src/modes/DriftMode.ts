@@ -42,6 +42,7 @@ export class DriftMode implements IGameMode {
     context.cityWorld.group.visible = false
     context.raceTrack.setVisible(false)
     context.driftTrack.setVisible(true)
+    context.weatherSystem?.registerAsphaltMaterials(context.driftTrack.getAsphaltMaterials())
 
     context.hud.setTelemetryVisible(false)
     context.hud.setSpawnButtonVisible(true)

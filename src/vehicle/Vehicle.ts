@@ -68,6 +68,9 @@ export class Vehicle {
   // Headlights & Brake Lights System (Phase 31.3)
   public headlights: VehicleHeadlights
 
+  // Weather grip scaling (Phase 31.4)
+  public weatherGripMultiplier: number = 1.0
+
   constructor(
     scene: THREE.Scene,
     physicsWorld: PhysicsWorld,
@@ -242,7 +245,12 @@ export class Vehicle {
     return this.activeDefinition
   }
 
+  public setWeatherGripMultiplier(multiplier: number): void {
+    this.weatherGripMultiplier = Math.max(0.5, Math.min(1.2, multiplier))
+  }
+
   public update(delta: number, keys: VehicleInput, isNight: boolean = false) {
+
     if (!this.rigidBody) return
 
     // 1. Sync Three.js Root Object from Rapier RigidBody
@@ -288,11 +296,13 @@ export class Vehicle {
 
     // 4. Configurable Traction & Dynamic Drift Dynamics
     // Under active drift or handbrake, lateral grip drops immediately to allow smooth, controllable slides
-    const targetTraction = keys.handbrake
+    const baseTargetTraction = keys.handbrake
       ? Math.min(this.config.lateralGripDrift, 0.18)
       : this.isDrifting
       ? this.config.lateralGripDrift
       : this.config.lateralGripNormal
+
+    const targetTraction = baseTargetTraction * this.weatherGripMultiplier
 
     const gripLerpRate = (this.isDrifting || keys.handbrake) ? 14.0 : this.config.driftGripRecoverySpeed
     this.currentTraction = THREE.MathUtils.lerp(

@@ -595,4 +595,9 @@ export class DriftTrack {
   public setVisible(visible: boolean): void {
     this.group.visible = visible
   }
+
+  public getAsphaltMaterials(): THREE.MeshStandardMaterial[] {
+    return [this.materials.asphaltDark, this.materials.asphaltLight]
+  }
 }
+

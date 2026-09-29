@@ -178,6 +178,18 @@
       "formattedScore": "215 km/h",
       "date": 1790428446468,
       "rank": 3
+    },
+    {
+      "id": "rec-city_top_speed-usr_hq883r2-1790668199070",
+      "category": "city_top_speed",
+      "playerId": "usr_hq883r2",
+      "playerName": "Racer_plsw",
+      "carId": "sedan_sports",
+      "carName": "Apex GT Sedan",
+      "score": 101,
+      "formattedScore": "101 km/h",
+      "date": 1790669814710,
+      "rank": 4
     }
   ]
 }

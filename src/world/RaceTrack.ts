@@ -628,4 +628,9 @@ export class RaceTrack {
   public setVisible(visible: boolean) {
     this.group.visible = visible
   }
+
+  public getAsphaltMaterials(): THREE.MeshStandardMaterial[] {
+    return [this.materials.asphalt]
+  }
 }
+

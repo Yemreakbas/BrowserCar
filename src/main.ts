@@ -13,6 +13,7 @@ import { RaceMode } from './modes/RaceMode.ts'
 import { DriftMode } from './modes/DriftMode.ts'
 import { AIManager } from './ai/AIManager.ts'
 import { DayNightCycle, type TimePreset } from './effects/DayNightCycle.ts'
+import { WeatherSystem, type WeatherType, type WeatherPreset } from './effects/WeatherSystem.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
@@ -111,8 +112,14 @@ app.innerHTML = `
           <span id="headlights-btn-text">Farlar</span>
           <span class="reset-key-hint">H</span>
         </button>
+        <button id="btn-weather" class="reset-btn" type="button" title="Hava Durumu: Yağmur / Fırtına / Sis / Güneş (Y)">
+          <span id="weather-btn-icon" style="font-size: 13px;">☀️</span>
+          <span id="weather-btn-text">Açık</span>
+          <span class="reset-key-hint">Y</span>
+        </button>
       </div>
     </header>
+
 
     <!-- Vehicle Reset Alert Toast & Action Hint (Phase 19) -->
     <div id="hud-reset-toast">
@@ -864,7 +871,11 @@ const timeBtnText = document.querySelector<HTMLSpanElement>('#time-btn-text')!
 const btnHeadlights = document.querySelector<HTMLButtonElement>('#btn-headlights')!
 const headlightsBtnIcon = document.querySelector<HTMLSpanElement>('#headlights-btn-icon')!
 const headlightsBtnText = document.querySelector<HTMLSpanElement>('#headlights-btn-text')!
+const btnWeather = document.querySelector<HTMLButtonElement>('#btn-weather')!
+const weatherBtnIcon = document.querySelector<HTMLSpanElement>('#weather-btn-icon')!
+const weatherBtnText = document.querySelector<HTMLSpanElement>('#weather-btn-text')!
 const spawnBtnText = document.querySelector<HTMLSpanElement>('#spawn-btn-text')!
+
 const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
 const hudFpsBadge = document.querySelector<HTMLDivElement>('#hud-fps-badge')!
 const cityInfoCard = document.querySelector<HTMLDivElement>('#city-info-card')!
@@ -1498,6 +1509,30 @@ async function bootstrap() {
 
   btnHeadlights.addEventListener('click', toggleHeadlights)
 
+  // 7d. Initialize Dynamic Weather System (Phase 31.4)
+  const weatherSystem = new WeatherSystem(scene, audioManager, dayNightCycle)
+  weatherSystem.registerAsphaltMaterials(city.getAsphaltMaterials())
+
+  const updateWeatherUI = (type: WeatherType, preset: WeatherPreset) => {
+    weatherBtnIcon.textContent = preset.icon
+    weatherBtnText.textContent = preset.name.split(' ')[0]
+    btnWeather.classList.toggle('weather-rain', type === 'RAIN')
+    btnWeather.classList.toggle('weather-storm', type === 'THUNDERSTORM')
+    btnWeather.classList.toggle('weather-fog', type === 'FOG')
+  }
+
+  weatherSystem.onWeatherChanged = (type, preset) => {
+    updateWeatherUI(type, preset)
+    showResetToast(`Hava Durumu: ${preset.icon} ${preset.name}`, 'info', 1600)
+  }
+
+  const cycleWeather = () => {
+    weatherSystem.cycleWeather()
+    audioManager.playClick()
+  }
+
+  btnWeather.addEventListener('click', cycleWeather)
+
   // 8. Initialize AI Manager & Mode Manager (Default: City Free Roam)
   const aiManager = new AIManager(scene)
   const modeManager = new ModeManager({
@@ -1513,7 +1548,9 @@ async function bootstrap() {
     audio: audioManager,
     aiManager,
     dayNightCycle,
+    weatherSystem,
   })
+
 
   // 8b. Initialize Polished Follow Camera System (Phase 20)
   const followCamera = new FollowCamera(camera, vehicle)
@@ -2907,6 +2944,10 @@ async function bootstrap() {
       case 'KeyT':
         cycleTimePreset()
         break
+      case 'KeyY':
+        cycleWeather()
+        break
+
       case 'F3':
         e.preventDefault()
         toggleDetailedStats()
@@ -2985,6 +3026,7 @@ async function bootstrap() {
   let accumulatedDistanceMeters = 0
   let lastTopSpeedSubmitTime = 0
   const lastShadowPos = new THREE.Vector3(-9999, -9999, -9999)
+  const weatherCarVel = new THREE.Vector3()
 
   function animate() {
     requestAnimationFrame(animate)
@@ -2997,6 +3039,12 @@ async function bootstrap() {
     // 9.05 Day/Night Cycle & Atmosphere Update (Phase 31.3)
     dayNightCycle.update(delta)
     const isNight = dayNightCycle.isNight()
+
+    // 9.06 Dynamic Weather System Simulation & Wet Surface Grip (Phase 31.4)
+    const carLinvel = vehicle.rigidBody ? vehicle.rigidBody.linvel() : { x: 0, y: 0, z: 0 }
+    weatherCarVel.set(carLinvel.x, carLinvel.y, carLinvel.z)
+    weatherSystem.update(delta, camera.position, vehicle.root.position, weatherCarVel)
+    vehicle.setWeatherGripMultiplier(weatherSystem.getGripMultiplier())
 
     // 9.1 Physics Simulation Step
     physicsWorld.step()
