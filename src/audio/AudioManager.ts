@@ -642,22 +642,51 @@ export class AudioManager {
   private synthesizeCollision(intensity: number): void {
     if (!this.ctx || !this.sfxGain) return
     const now = this.ctx.currentTime
+
+    // 1. Heavy low-end impact thump
     const osc = this.ctx.createOscillator()
     const gain = this.ctx.createGain()
 
     osc.type = 'sawtooth'
-    osc.frequency.setValueAtTime(110, now)
-    osc.frequency.exponentialRampToValueAtTime(35, now + 0.35)
+    osc.frequency.setValueAtTime(120, now)
+    osc.frequency.exponentialRampToValueAtTime(32, now + 0.38)
 
-    const vol = Math.min(0.8 * intensity, 0.9)
+    const vol = Math.min(0.85 * intensity, 0.95)
     gain.gain.setValueAtTime(vol, now)
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45)
 
     osc.connect(gain)
     gain.connect(this.sfxGain)
     osc.start(now)
-    osc.stop(now + 0.45)
+    osc.stop(now + 0.46)
+
+    // 2. High metal crunch burst on hard impacts
+    if (intensity > 0.35) {
+      const bufferSize = Math.floor(this.ctx.sampleRate * 0.22)
+      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate)
+      const data = noiseBuffer.getChannelData(0)
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.08))
+      }
+
+      const crunchFilter = this.ctx.createBiquadFilter()
+      crunchFilter.type = 'bandpass'
+      crunchFilter.frequency.setValueAtTime(1400, now)
+      crunchFilter.Q.setValueAtTime(3.0, now)
+
+      const crunchGain = this.ctx.createGain()
+      crunchGain.gain.setValueAtTime(vol * 0.65, now)
+      crunchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22)
+
+      const noiseSource = this.ctx.createBufferSource()
+      noiseSource.buffer = noiseBuffer
+      noiseSource.connect(crunchFilter)
+      crunchFilter.connect(crunchGain)
+      crunchGain.connect(this.sfxGain)
+      noiseSource.start(now)
+    }
   }
+
 
   private synthesizeFinish(): void {
     if (!this.ctx || !this.sfxGain) return

@@ -9,7 +9,9 @@ import {
 } from './VehicleDefinition.ts'
 import { NitroSystem } from './NitroSystem.ts'
 import { VehicleHeadlights } from '../effects/VehicleHeadlights.ts'
+import { VehicleDamageSystem } from '../effects/VehicleDamageSystem.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
+
 
 export interface VehicleInput {
   forward: boolean
@@ -71,6 +73,9 @@ export class Vehicle {
   // Weather grip scaling (Phase 31.4)
   public weatherGripMultiplier: number = 1.0
 
+  // Damage, Collision Deformation & Sparks System (Phase 31.5)
+  public damageSystem: VehicleDamageSystem
+
   constructor(
     scene: THREE.Scene,
     physicsWorld: PhysicsWorld,
@@ -97,6 +102,10 @@ export class Vehicle {
 
     // Headlights attached to body group (Phase 31.3)
     this.headlights = new VehicleHeadlights(this.bodyGroup)
+
+    // Damage & Collision Sparks System (Phase 31.5)
+    this.damageSystem = new VehicleDamageSystem(scene)
+
 
     // Temporary placeholder until Kenney model finishes loading
     this.createPlaceholder()
@@ -191,6 +200,9 @@ export class Vehicle {
 
           if (child.name === 'body') {
             this.bodyMesh = child
+            if ((child as THREE.Mesh).isMesh) {
+              this.damageSystem.attachBodyMesh(child as THREE.Mesh)
+            }
           } else if (child.name === 'wheel-front-left') {
             this.wheelFrontLeft = child
             this.wheelFrontLeft.rotation.order = 'YXZ'
@@ -203,6 +215,16 @@ export class Vehicle {
             this.wheelBackRight = child
           }
         })
+
+        if (!this.bodyMesh) {
+          this.carModel.traverse((child) => {
+            if (!this.bodyMesh && (child as THREE.Mesh).isMesh && !child.name.includes('wheel')) {
+              this.bodyMesh = child
+              this.damageSystem.attachBodyMesh(child as THREE.Mesh)
+            }
+          })
+        }
+
 
         this.bodyGroup.add(this.carModel)
         this.isLoaded = true
@@ -238,6 +260,7 @@ export class Vehicle {
     }
 
     this.isLoaded = false
+    this.damageSystem.repair()
     this.loadKenneyCar(def.modelPath, onLoaded)
   }
 
@@ -249,7 +272,41 @@ export class Vehicle {
     this.weatherGripMultiplier = Math.max(0.5, Math.min(1.2, multiplier))
   }
 
+  public repair(): void {
+    this.damageSystem.repair()
+  }
+
+  public applyImpactDamage(
+    impactSpeedKmh: number,
+    localImpactPoint?: THREE.Vector3,
+    impactDirection?: THREE.Vector3,
+    worldImpactPos?: THREE.Vector3
+  ): number {
+    const point =
+      localImpactPoint ??
+      new THREE.Vector3(
+        (Math.random() - 0.5) * 0.8,
+        0.35,
+        this.currentSpeed >= 0 ? 1.45 : -1.45
+      )
+    const dir =
+      impactDirection ??
+      new THREE.Vector3(
+        -Math.sin(this.currentSteerAngle) * 0.4,
+        -0.2,
+        this.currentSpeed >= 0 ? -1.0 : 1.0
+      ).normalize()
+
+    const worldOrigin = worldImpactPos ?? this.root.localToWorld(point.clone())
+    return this.damageSystem.applyCollision(impactSpeedKmh, point, dir, worldOrigin)
+  }
+
+  public getForwardVector(out: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
+    return out.set(0, 0, 1).applyQuaternion(this.root.quaternion)
+  }
+
   public update(delta: number, keys: VehicleInput, isNight: boolean = false) {
+
 
     if (!this.rigidBody) return
 
@@ -405,8 +462,14 @@ export class Vehicle {
       impulse -= brakeImpulse
     }
 
+    // 5.1 Power scaled down if engine is damaged (Phase 31.5)
+    if (keys.forward || keys.backward) {
+      impulse *= this.damageSystem.getEngineMultiplier()
+    }
+
     newLinvelX += forward.x * impulse
     newLinvelZ += forward.z * impulse
+
 
     // Apply updated linear velocity (preserving natural Rapier gravity on Y)
     this.rigidBody.setLinvel({ x: newLinvelX, y: linvel.y, z: newLinvelZ }, true)

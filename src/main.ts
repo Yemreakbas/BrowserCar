@@ -222,7 +222,18 @@ app.innerHTML = `
             <div id="hud-nitro-bar" class="nitro-bar-fill" style="width: 100%;"></div>
           </div>
         </div>
+        <!-- Vehicle Health & Durability Gauge (Phase 31.5) -->
+        <div id="hud-health-container" class="health-gauge-container">
+          <div class="health-gauge-header">
+            <span class="health-label">🛡️ GÖVDE SAĞLIĞI</span>
+            <span id="hud-health-val" class="health-percent">100%</span>
+          </div>
+          <div class="health-bar-track">
+            <div id="hud-health-bar" class="health-bar-fill" style="width: 100%;"></div>
+          </div>
+        </div>
       </div>
+
 
       <!-- Dedicated City Free Roam HUD Card (Phase 21) -->
       <div id="city-info-card" class="speedometer-card city-info-card" style="display: block;">
@@ -852,6 +863,10 @@ const hudSpeedBar = document.querySelector<HTMLDivElement>('#hud-speed-bar')!
 const hudNitroBar = document.querySelector<HTMLDivElement>('#hud-nitro-bar')!
 const hudNitroVal = document.querySelector<HTMLSpanElement>('#hud-nitro-val')!
 const hudNitroContainer = document.querySelector<HTMLDivElement>('#hud-nitro-container')!
+const hudHealthBar = document.querySelector<HTMLDivElement>('#hud-health-bar')!
+const hudHealthVal = document.querySelector<HTMLSpanElement>('#hud-health-val')!
+const hudHealthContainer = document.querySelector<HTMLDivElement>('#hud-health-container')!
+
 const keyW = document.querySelector<HTMLDivElement>('#key-w')!
 const keyA = document.querySelector<HTMLDivElement>('#key-a')!
 const keyS = document.querySelector<HTMLDivElement>('#key-s')!
@@ -1533,7 +1548,33 @@ async function bootstrap() {
 
   btnWeather.addEventListener('click', cycleWeather)
 
+  // 7e. Wire up Vehicle Health & Durability UI (Phase 31.5)
+  const updateHealthUI = (health: number, maxHealth: number) => {
+    if (!hudHealthBar || !hudHealthVal || !hudHealthContainer) return
+    const pct = Math.max(0, Math.min(100, Math.round((health / maxHealth) * 100)))
+    hudHealthBar.style.width = `${pct}%`
+    hudHealthVal.textContent = pct === 0 ? 'PERT' : `${pct}%`
+
+    hudHealthContainer.classList.toggle('moderate', pct < 70 && pct >= 35)
+    hudHealthContainer.classList.toggle('critical', pct < 35 && pct > 0)
+    hudHealthContainer.classList.toggle('wrecked', pct === 0)
+  }
+
+  vehicle.damageSystem.onHealthChanged = (health, maxHealth) => {
+    updateHealthUI(health, maxHealth)
+  }
+
+  vehicle.damageSystem.onWrecked = () => {
+    showResetToast('🚨 ARAÇ PERT OLDU! [R] ile Sıfırla ve Onar', 'alert', 3500)
+    triggerScreenFlash()
+  }
+
+  vehicle.damageSystem.onRepaired = () => {
+    updateHealthUI(100, 100)
+  }
+
   // 8. Initialize AI Manager & Mode Manager (Default: City Free Roam)
+
   const aiManager = new AIManager(scene)
   const modeManager = new ModeManager({
     scene,
@@ -3055,14 +3096,23 @@ async function bootstrap() {
     // 9.2b Vehicle Reset & Out-Of-Bounds Fall / Flip Monitor (Phase 19)
     vehicleResetSystem.update(delta, keys)
 
-    // 9.2c Driving Audio Engine (Phase 22)
+    // 9.2c Driving Audio Engine & Collision Damage (Phase 22 & Phase 31.5)
     const speedKmh = vehicle.getSpeedKmh()
     const speedDrop = previousVehicleSpeed - vehicle.currentSpeed
-    if (previousVehicleSpeed > 3.5 && speedDrop > 3.2 && !keys.backward) {
-      audioManager.playCollision(Math.min(speedDrop / 10, 1.0))
-      followCamera.addTrauma(Math.min(speedDrop / 15, 0.7))
+    if (previousVehicleSpeed > 3.5 && speedDrop > 2.8 && !keys.backward) {
+      const impactSpeedKmh = speedDrop * 3.6
+      const dmg = vehicle.applyImpactDamage(impactSpeedKmh)
+      audioManager.playCollision(Math.min(speedDrop / 8.5, 1.0))
+      followCamera.addTrauma(Math.min(speedDrop / 11, 0.85))
+      if (dmg > 10) {
+        triggerScreenFlash()
+      }
     }
     previousVehicleSpeed = vehicle.currentSpeed
+
+    // 9.2d Vehicle Damage & Smoke/Sparks Update (Phase 31.5)
+    vehicle.damageSystem.update(delta, vehicle.root.position, weatherCarVel, vehicle.getForwardVector())
+
 
     const throttle = keys.forward ? 1.0 : (keys.backward && vehicle.currentSpeed < -0.2 ? 0.75 : 0.0)
     const isBraking = keys.backward && vehicle.currentSpeed > 0.5

@@ -199,8 +199,12 @@ export class VehicleResetSystem {
       this.tireSmoke.reset()
     }
 
+    // Fully repair vehicle health, restore factory body geometry, and extinguish smoke/fire (Phase 31.5)
+    this.vehicle.repair()
+
     // Reset vehicle physics body & visual hierarchy
     this.vehicle.reset(targetPos.x, targetPos.z, targetRotY, targetPos.y || 0.45)
+
     this.onRespawn?.(reason)
 
     // Synchronize authoritative respawn with multiplayer server
