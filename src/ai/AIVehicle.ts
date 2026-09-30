@@ -324,13 +324,10 @@ export class AIVehicle {
     // Check obstacles ahead (Player and other AIs)
     for (let oIdx = 0; oIdx < obstacles.length; oIdx++) {
       const obs = obstacles[oIdx]
-      // Skip self
-      if (obs.position === this.root.position) continue
-
       this.tempObsDiff.subVectors(obs.position, this.root.position)
       const dist = this.tempObsDiff.length()
 
-      if (dist < 14.0 && dist > 0.05) {
+      if (dist < 14.0 && dist > 0.5) {
         this.tempObsDir.copy(this.tempObsDiff).multiplyScalar(1.0 / dist)
         const obsForwardDot = this.tempForward.dot(this.tempObsDir)
         if (obsForwardDot > 0.4) {

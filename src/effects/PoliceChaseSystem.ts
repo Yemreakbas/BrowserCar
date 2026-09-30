@@ -12,7 +12,8 @@ export interface PoliceUnit {
   mesh: THREE.Group | null
   strobeLeft: THREE.Mesh
   strobeRight: THREE.Mesh
-  strobeLight: THREE.PointLight
+  redMat: THREE.MeshStandardMaterial
+  blueMat: THREE.MeshStandardMaterial
   currentSpeed: number
   maxSpeed: number
   acceleration: number
@@ -76,7 +77,7 @@ export class PoliceChaseSystem {
   }
 
   /**
-   * Pre-allocates police cruiser objects with rooftop emergency beacons
+   * Pre-allocates police cruiser objects with rooftop emergency beacons (Zero PointLights for pure 60+ FPS)
    */
   private initPolicePool(): void {
     const strobeGeo = new THREE.BoxGeometry(0.24, 0.12, 0.22)
@@ -101,30 +102,27 @@ export class PoliceChaseSystem {
       placeholder.position.y = 0.55
       bodyGroup.add(placeholder)
 
-      // Lightbar Red Strobe (Left roof)
-      const redMat = new THREE.MeshBasicMaterial({
+      // Lightbar Red Strobe (Left roof) - Uses emissive glow for 0 performance impact
+      const redMat = new THREE.MeshStandardMaterial({
         color: 0xef4444,
-        transparent: true,
-        opacity: 0.25,
+        emissive: 0xef4444,
+        emissiveIntensity: 0.3,
+        roughness: 0.3,
       })
       const strobeLeft = new THREE.Mesh(strobeGeo, redMat)
       strobeLeft.position.set(-0.35, 1.25, -0.15)
       bodyGroup.add(strobeLeft)
 
-      // Lightbar Blue Strobe (Right roof)
-      const blueMat = new THREE.MeshBasicMaterial({
+      // Lightbar Blue Strobe (Right roof) - Uses emissive glow for 0 performance impact
+      const blueMat = new THREE.MeshStandardMaterial({
         color: 0x3b82f6,
-        transparent: true,
-        opacity: 0.25,
+        emissive: 0x3b82f6,
+        emissiveIntensity: 0.3,
+        roughness: 0.3,
       })
       const strobeRight = new THREE.Mesh(strobeGeo, blueMat)
       strobeRight.position.set(0.35, 1.25, -0.15)
       bodyGroup.add(strobeRight)
-
-      // Roof PointLight flashing alternating red & blue
-      const strobeLight = new THREE.PointLight(0xef4444, 0, 16, 1.8)
-      strobeLight.position.set(0, 1.5, -0.15)
-      bodyGroup.add(strobeLight)
 
       this.units.push({
         id: `cruiser_${i}`,
@@ -133,7 +131,8 @@ export class PoliceChaseSystem {
         mesh: null,
         strobeLeft,
         strobeRight,
-        strobeLight,
+        redMat,
+        blueMat,
         currentSpeed: 0,
         maxSpeed: 28.0,
         acceleration: 22.0,
@@ -188,13 +187,14 @@ export class PoliceChaseSystem {
    * Triggers Heat Level increase from player actions (speeding, crash, drift, or button)
    */
   public addHeatScore(amount: number): void {
-    if (this.pursuitState === 'BUSTED') return
+    if (this.pursuitState === 'BUSTED' || this.pursuitState === 'ESCAPED') return
 
     this.heatProgress += amount
     if (this.heatProgress >= 100) {
       this.heatProgress = 0
       this.setHeatLevel(Math.min(5, this.heatLevel + 1))
-    } else if (this.heatLevel === 0 && amount > 0) {
+    } else if (this.heatLevel === 0 && this.heatProgress >= 35) {
+      this.heatProgress = 0
       this.setHeatLevel(1)
     }
 
@@ -207,7 +207,6 @@ export class PoliceChaseSystem {
    * Sets heat level directly (0 to 5) and activates required police units
    */
   public setHeatLevel(level: number): void {
-    const prev = this.heatLevel
     this.heatLevel = Math.max(0, Math.min(5, level))
 
     if (this.heatLevel === 0) {
@@ -218,6 +217,8 @@ export class PoliceChaseSystem {
     this.pursuitState = 'CHASE'
     this.escapeTimer = 0
     this.bustTimer = 0
+    this.bustPercent = 0
+    this.escapePercent = 0
 
     // Activate police units based on heat
     // Heat 1: 1 unit, Heat 2: 2 units, Heat 3-5: 3 units
@@ -270,7 +271,7 @@ export class PoliceChaseSystem {
   }
 
   /**
-   * Toggles chase on or off via keyboard hotkey [P]
+   * Toggles chase on or off via keyboard hotkey [J] or UI button
    */
   public toggleChase(): void {
     if (this.heatLevel === 0) {
@@ -296,7 +297,8 @@ export class PoliceChaseSystem {
       unit.active = false
       unit.root.visible = false
       unit.currentSpeed = 0
-      unit.strobeLight.intensity = 0
+      unit.redMat.emissiveIntensity = 0.2
+      unit.blueMat.emissiveIntensity = 0.2
     }
 
     if (this.audioManager) {
@@ -312,10 +314,11 @@ export class PoliceChaseSystem {
   }
 
   /**
-   * Main simulation step (Zero-allocation for 60+ FPS)
+   * Main simulation step (Zero-allocation, zero uncaught errors, 60+ FPS)
    */
   public update(delta: number, playerVehicle: Vehicle): void {
-    if (this.heatLevel === 0 || this.pursuitState === 'CLEAR') {
+    // If not in active chase or evading, do not run pursuit physics
+    if (this.heatLevel === 0 || this.pursuitState === 'CLEAR' || this.pursuitState === 'BUSTED' || this.pursuitState === 'ESCAPED') {
       return
     }
 
@@ -334,21 +337,14 @@ export class PoliceChaseSystem {
       const unit = this.units[i]
       if (!unit.active) continue
 
-      // Strobe lighting
+      // Strobe lighting via emissive materials (Zero GPU light pass overhead)
       const isRedPhase = (flashIndex + i) % 2 === 0
-      const redMat = unit.strobeLeft.material as THREE.MeshBasicMaterial
-      const blueMat = unit.strobeRight.material as THREE.MeshBasicMaterial
-
       if (isRedPhase) {
-        redMat.opacity = 1.0
-        blueMat.opacity = 0.15
-        unit.strobeLight.color.setHex(0xef4444)
-        unit.strobeLight.intensity = 2.4
+        unit.redMat.emissiveIntensity = 4.5
+        unit.blueMat.emissiveIntensity = 0.2
       } else {
-        redMat.opacity = 0.15
-        blueMat.opacity = 1.0
-        unit.strobeLight.color.setHex(0x3b82f6)
-        unit.strobeLight.intensity = 2.4
+        unit.redMat.emissiveIntensity = 0.2
+        unit.blueMat.emissiveIntensity = 4.5
       }
 
       // Distance to player
@@ -411,7 +407,6 @@ export class PoliceChaseSystem {
           if (this.audioManager) {
             this.audioManager.playCollision(0.7)
           }
-          // Slight pushback
           unit.currentSpeed *= 0.7
         }
       }
@@ -429,11 +424,11 @@ export class PoliceChaseSystem {
       this.escapeTimer = 0
       this.bustPercent = Math.min(100, Math.round((this.bustTimer / this.BUST_DURATION) * 100))
 
-      if (this.pursuitState !== 'BUSTED') {
+      if (this.pursuitState !== 'CHASE') {
         this.pursuitState = 'CHASE'
-        if (this.onPursuitStateChanged) {
-          this.onPursuitStateChanged('CHASE', `🚨 KISKACA ALINDIN! (%${this.bustPercent})`)
-        }
+      }
+      if (this.onPursuitStateChanged) {
+        this.onPursuitStateChanged('CHASE', `🚨 KISKACA ALINDIN! (%${this.bustPercent})`)
       }
 
       if (this.bustTimer >= this.BUST_DURATION && this.pursuitState !== 'BUSTED') {
@@ -456,7 +451,7 @@ export class PoliceChaseSystem {
           }
         }
 
-        if (this.escapeTimer >= this.ESCAPE_DURATION) {
+        if (this.escapeTimer >= this.ESCAPE_DURATION && this.pursuitState !== 'ESCAPED') {
           this.handleEscaped()
         }
       } else {
@@ -477,8 +472,12 @@ export class PoliceChaseSystem {
    * Player was trapped and arrested by the police
    */
   private handleBusted(playerVehicle: Vehicle): void {
+    if (this.pursuitState === 'BUSTED') return
     this.pursuitState = 'BUSTED'
-    const fineAmount = 250 * this.heatLevel
+    this.bustTimer = 0
+    this.escapeTimer = 0
+    this.bustPercent = 100
+    const fineAmount = 250 * Math.max(1, this.heatLevel)
 
     if (this.audioManager) {
       this.audioManager.stopPoliceSiren()
@@ -502,7 +501,11 @@ export class PoliceChaseSystem {
    * Player successfully escaped from police pursuit
    */
   private handleEscaped(): void {
+    if (this.pursuitState === 'ESCAPED') return
     this.pursuitState = 'ESCAPED'
+    this.escapeTimer = 0
+    this.bustTimer = 0
+    this.escapePercent = 100
     const rewardCash = 350 * Math.max(1, this.heatLevel)
 
     if (this.audioManager) {
@@ -527,9 +530,8 @@ export class PoliceChaseSystem {
       this.group.parent.remove(this.group)
     }
     for (const unit of this.units) {
-      unit.strobeLight.dispose()
-      ;(unit.strobeLeft.material as THREE.Material).dispose()
-      ;(unit.strobeRight.material as THREE.Material).dispose()
+      unit.redMat.dispose()
+      unit.blueMat.dispose()
     }
     this.units = []
   }

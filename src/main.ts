@@ -1641,7 +1641,6 @@ async function bootstrap() {
   policeChase.onBusted = (fine) => {
     showResetToast(`🚨 YAKALANDIN! -${fine} CR CEZA KESİLDİ`, 'alert', 3500)
     triggerScreenFlash()
-    playerProfileManager.addCash(-fine)
     setTimeout(() => {
       vehicleResetSystem.respawn('manual')
     }, 1500)
@@ -1649,7 +1648,6 @@ async function bootstrap() {
 
   policeChase.onEscaped = (reward) => {
     showResetToast(`✨ POLİSTEN KAÇTIN! +${reward} CR KAZANDIN`, 'info', 3200)
-    playerProfileManager.addCash(reward)
   }
 
   const togglePoliceChase = () => {
@@ -3163,6 +3161,8 @@ async function bootstrap() {
   const lastShadowPos = new THREE.Vector3(-9999, -9999, -9999)
   const weatherCarVel = new THREE.Vector3()
   let lastHudGear = ''
+  let lastProgressMode = ''
+  let lastProgressPct = -1
 
   function animate() {
     requestAnimationFrame(animate)
@@ -3221,20 +3221,34 @@ async function bootstrap() {
     policeChase.update(delta, vehicle)
     if (policeChase.heatLevel > 0) {
       if (policeChase.bustPercent > 0) {
-        policeProgressContainer.style.display = 'flex'
-        policeProgressLabel.textContent = 'KISKAÇ'
-        policeProgressVal.textContent = `%${policeChase.bustPercent}`
-        policeBarFill.style.width = `${policeChase.bustPercent}%`
-        policeBarFill.className = 'police-bar-fill'
+        if (lastProgressMode !== 'bust' || lastProgressPct !== policeChase.bustPercent) {
+          lastProgressMode = 'bust'
+          lastProgressPct = policeChase.bustPercent
+          policeProgressContainer.style.display = 'flex'
+          policeProgressLabel.textContent = 'KISKAÇ'
+          policeProgressVal.textContent = `%${policeChase.bustPercent}`
+          policeBarFill.style.width = `${policeChase.bustPercent}%`
+          policeBarFill.className = 'police-bar-fill'
+        }
       } else if (policeChase.pursuitState === 'EVADING') {
-        policeProgressContainer.style.display = 'flex'
-        policeProgressLabel.textContent = 'KAÇIŞ'
-        policeProgressVal.textContent = `%${policeChase.escapePercent}`
-        policeBarFill.style.width = `${policeChase.escapePercent}%`
-        policeBarFill.className = 'police-bar-fill evade'
-      } else {
+        if (lastProgressMode !== 'evade' || lastProgressPct !== policeChase.escapePercent) {
+          lastProgressMode = 'evade'
+          lastProgressPct = policeChase.escapePercent
+          policeProgressContainer.style.display = 'flex'
+          policeProgressLabel.textContent = 'KAÇIŞ'
+          policeProgressVal.textContent = `%${policeChase.escapePercent}`
+          policeBarFill.style.width = `${policeChase.escapePercent}%`
+          policeBarFill.className = 'police-bar-fill evade'
+        }
+      } else if (lastProgressMode !== 'none') {
+        lastProgressMode = 'none'
+        lastProgressPct = -1
         policeProgressContainer.style.display = 'none'
       }
+    } else if (lastProgressMode !== 'none') {
+      lastProgressMode = 'none'
+      lastProgressPct = -1
+      policeProgressContainer.style.display = 'none'
     }
 
 
