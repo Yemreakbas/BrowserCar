@@ -14,14 +14,14 @@ export class RaceMode implements IGameMode {
   public readonly badgeColor = '#ef4444'
 
   public static readonly GRID_POSITIONS = [
-    { x: 2.5, y: 0.05, z: 570, rotY: 0 },
-    { x: -2.5, y: 0.05, z: 563, rotY: 0 },
-    { x: 2.5, y: 0.05, z: 556, rotY: 0 },
-    { x: -2.5, y: 0.05, z: 549, rotY: 0 },
-    { x: 2.5, y: 0.05, z: 542, rotY: 0 },
-    { x: -2.5, y: 0.05, z: 535, rotY: 0 },
-    { x: 2.5, y: 0.05, z: 528, rotY: 0 },
-    { x: -2.5, y: 0.05, z: 521, rotY: 0 },
+    { x: 2.8, y: 0.05, z: 575, rotY: 0 },
+    { x: -2.8, y: 0.05, z: 565, rotY: 0 },
+    { x: 2.8, y: 0.05, z: 555, rotY: 0 },
+    { x: -2.8, y: 0.05, z: 545, rotY: 0 },
+    { x: 2.8, y: 0.05, z: 535, rotY: 0 },
+    { x: -2.8, y: 0.05, z: 525, rotY: 0 },
+    { x: 2.8, y: 0.05, z: 515, rotY: 0 },
+    { x: -2.8, y: 0.05, z: 505, rotY: 0 },
   ]
 
   private raceSystem = new RaceSystem()
@@ -177,13 +177,14 @@ export class RaceMode implements IGameMode {
         context.vehicle.rigidBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
       }
 
-      // 2. Check Direction Alignment (Wrong Way Detection)
+      // 2. Check Direction Alignment (Wrong Way Detection based on current road tangent)
       const checkpoints = raceTrack.checkpoints
       const targetCp = checkpoints[this.raceSystem.nextCheckpointIndex]
       if (targetCp) {
         this.tempCarForward.set(0, 0, 1).applyQuaternion(carQuat)
-        const dot = this.tempCarForward.dot(targetCp.forward)
-        const isWrongWay = Math.abs(carSpeed) > 3.0 && dot < -0.3
+        const trackDir = raceTrack.getTrackTangentAt(carPos)
+        const dot = this.tempCarForward.dot(trackDir)
+        const isWrongWay = Math.abs(carSpeed) > 3.5 && dot < -0.35
         context.hud.setWrongWayVisible?.(isWrongWay)
 
         // 3. Proximity Check & Authoritative Checkpoint Passing

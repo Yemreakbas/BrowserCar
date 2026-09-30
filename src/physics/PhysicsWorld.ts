@@ -67,6 +67,26 @@ export class PhysicsWorld {
     return this.world.createCollider(desc)
   }
 
+  public createStaticRotatedBoxCollider(
+    x: number,
+    y: number,
+    z: number,
+    halfX: number,
+    halfY: number,
+    halfZ: number,
+    rotationY: number,
+    friction: number = 0.5,
+    restitution: number = 0.15
+  ): RAPIER.Collider {
+    const halfRot = rotationY / 2
+    const desc = RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ)
+      .setTranslation(x, y, z)
+      .setRotation({ x: 0, y: Math.sin(halfRot), z: 0, w: Math.cos(halfRot) })
+      .setFriction(friction)
+      .setRestitution(restitution)
+    return this.world.createCollider(desc)
+  }
+
   private createCityBlockColliders() {
     // 4 Main Quadrant Blocks: Centers (+-32, +-32), Size: 44m x 44m (halfExtent: 22m x 22m)
     // We add raised curb step colliders so the car hits the sidewalks

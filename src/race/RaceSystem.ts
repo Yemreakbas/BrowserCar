@@ -119,13 +119,14 @@ export class RaceSystem {
       const checkpoints = raceTrack.checkpoints
       const targetCp = checkpoints[this.nextCheckpointIndex]
 
-      // Check Direction Alignment (Prevent reverse direction driving)
+      // Check Direction Alignment (Accurate track heading alignment at current car position)
       this.tempCarForward.set(0, 0, 1).applyQuaternion(carQuaternion)
-      const dot = this.tempCarForward.dot(targetCp.forward)
+      const trackDir = raceTrack.getTrackTangentAt(carPos)
+      const dot = this.tempCarForward.dot(trackDir)
 
-      if (Math.abs(carSpeed) > 3.0 && dot < -0.3) {
+      if (Math.abs(carSpeed) > 3.5 && dot < -0.35) {
         this.isWrongWay = true
-      } else if (dot > 0.1) {
+      } else if (dot > 0.0) {
         this.isWrongWay = false
       }
 

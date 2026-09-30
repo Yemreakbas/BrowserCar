@@ -129,9 +129,9 @@ export class AIManager {
 
     // Predefined starting grid slots for AI opponents
     const gridSlots = [
-      { x: -2.5, y: 0.05, z: 563, rotY: 0 }, // Grid 2
-      { x: 2.5, y: 0.05, z: 556, rotY: 0 },  // Grid 3
-      { x: -2.5, y: 0.05, z: 549, rotY: 0 }, // Grid 4
+      { x: -2.8, y: 0.05, z: 565, rotY: 0 }, // Grid 2
+      { x: 2.8, y: 0.05, z: 555, rotY: 0 },  // Grid 3
+      { x: -2.8, y: 0.05, z: 545, rotY: 0 }, // Grid 4
     ]
 
     for (let i = 0; i < gridSlots.length; i++) {

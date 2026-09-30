@@ -28,19 +28,27 @@ export interface TrackSpawnPoint {
   rotationY: number
 }
 
+/**
+ * RaceTrack provides a wide, flowing, professional Grand Prix circuit (~750m),
+ * with rotated Armco barrier physics (zero road encroachment), red/white kerbs,
+ * start/finish gantry, distance boards, grandstands, and accurate spline tangent tracking.
+ */
 export class RaceTrack {
   public group: THREE.Group
   private physicsWorld: PhysicsWorld
   public isLoaded: boolean = true
 
-  // World Offset (Places RaceTrack 600m away from City to prevent any collider overlap)
+  // World Offset (Places RaceTrack 600m away from City to prevent collider overlap)
   public readonly offset: THREE.Vector3 = new THREE.Vector3(0, 0, 600)
 
   // Track Curve & Geometry Data
   private trackCurve!: THREE.CatmullRomCurve3
-  private readonly TRACK_WIDTH = 14.0
-  private readonly KERB_WIDTH = 1.3
-  private readonly NUM_SEGMENTS = 160
+  private readonly TRACK_WIDTH = 16.5 // Wide and spacious for overtaking & clean racing
+  private readonly KERB_WIDTH = 1.6
+  private readonly NUM_SEGMENTS = 180
+
+  // Pre-sampled spline tangents for instant, accurate track heading lookup anywhere on circuit
+  private splineSamples: Array<{ point: THREE.Vector3; tangent: THREE.Vector3; t: number }> = []
 
   // Checkpoints & Lap System
   public checkpoints: TrackCheckpoint[] = []
@@ -50,36 +58,42 @@ export class RaceTrack {
     currentLapTime: 0,
     bestLapTime: null,
     lastLapTime: null,
-    nextCheckpointIndex: 1, // Must hit checkpoint 1 first
+    nextCheckpointIndex: 1,
     totalCheckpoints: 0,
     isLapComplete: false,
-    lapMessage: 'Yarış Pisti Hazır! 1. Tura Başla',
+    lapMessage: 'Grand Prix Pisti Hazır! 1. Tura Başla',
   }
 
-  // Predefined Starting Grid & Pit Spawns (Situated at Z = 600)
+  // Starting Grid & Pit Spawns on Main Straight (Heading +Z towards Gantry at Z = 590)
   public readonly spawnPoints: TrackSpawnPoint[] = [
     {
       id: 'pole-position',
       name: 'Grid 1 (Pole Pozisyonu)',
-      position: new THREE.Vector3(2.5, 0.05, 570),
+      position: new THREE.Vector3(2.8, 0.05, 575),
       rotationY: 0,
     },
     {
       id: 'grid-2',
       name: 'Grid 2 (Ön Sıra Dış)',
-      position: new THREE.Vector3(-2.5, 0.05, 563),
+      position: new THREE.Vector3(-2.8, 0.05, 565),
       rotationY: 0,
     },
     {
       id: 'grid-3',
       name: 'Grid 3 (İkinci Sıra)',
-      position: new THREE.Vector3(2.5, 0.05, 556),
+      position: new THREE.Vector3(2.8, 0.05, 555),
+      rotationY: 0,
+    },
+    {
+      id: 'grid-4',
+      name: 'Grid 4 (İkinci Sıra Dış)',
+      position: new THREE.Vector3(-2.8, 0.05, 545),
       rotationY: 0,
     },
     {
       id: 'pit-lane',
       name: 'Pit Yolu (Çıkış)',
-      position: new THREE.Vector3(12.0, 0.05, 585),
+      position: new THREE.Vector3(13.5, 0.05, 580),
       rotationY: 0,
     },
   ]
@@ -88,20 +102,20 @@ export class RaceTrack {
   private materials = {
     asphalt: new THREE.MeshStandardMaterial({
       color: 0x181a1f,
-      roughness: 0.78,
+      roughness: 0.75,
       metalness: 0.12,
     }),
     grass: new THREE.MeshStandardMaterial({
-      color: 0x1e3a1e, // Deep circuit grass green
-      roughness: 0.92,
-      metalness: 0.05,
+      color: 0x166534, // Vibrant circuit outfield grass
+      roughness: 0.95,
+      metalness: 0.04,
     }),
-    kerbRed: new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5 }),
-    kerbWhite: new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 }),
+    kerbRed: new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.45 }),
+    kerbWhite: new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45 }),
     barrierArmco: new THREE.MeshStandardMaterial({
       color: 0x94a3b8,
-      metalness: 0.7,
-      roughness: 0.3,
+      metalness: 0.75,
+      roughness: 0.28,
     }),
     barrierPost: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 }),
     overheadGantry: new THREE.MeshStandardMaterial({
@@ -109,7 +123,8 @@ export class RaceTrack {
       metalness: 0.8,
       roughness: 0.25,
     }),
-    bleachers: new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.6 }),
+    bleachers: new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.55 }),
+    brakeBoard: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 }),
   }
 
   constructor(scene: THREE.Scene, physicsWorld: PhysicsWorld) {
@@ -120,6 +135,7 @@ export class RaceTrack {
 
     // 1. Build the mathematical circuit path spline (anchored at Z = 600)
     this.buildCircuitSpline()
+    this.initSplineSamples()
 
     // 2. Build continuous track ribbon, rumble strips, and road markings
     this.createRoadSurface()
@@ -127,7 +143,7 @@ export class RaceTrack {
     this.createStartFinishGantry()
     this.createStartingGridBoxes()
 
-    // 3. Build track barriers with Rapier physics colliders
+    // 3. Build track barriers with Rapier ROTATED physics colliders
     this.createTrackBarriers()
 
     // 4. Build circuit scenery (grandstands, brake markers, trees, floodlights)
@@ -139,38 +155,73 @@ export class RaceTrack {
 
   // --- 1. CIRCUIT SPLINE ---
   private buildCircuitSpline() {
-    // A flowing, diverse ~480m racing circuit situated at Z = 600:
-    // Main straight -> Turn 1/2 chicane -> Back straight -> Hairpin -> S-curves -> Final sweeper
-    const zOffset = this.offset.z
+    // A grand, flowing ~750m international racing circuit situated around Z = 600:
+    // Long Main Straight -> High-Speed Sweeper (T1-T2) -> Back Straight -> Wide Parabolic Hairpin (T3)
+    // -> Flowing S-Chicane (T4-T5) -> Infield Straight -> Parabolica (T6-T7) -> Main Straight
+    const zOffset = this.offset.z // 600
     const controlPoints = [
-      new THREE.Vector3(0, 0, -45 + zOffset),    // Start / Finish Straight
-      new THREE.Vector3(0, 0, 30 + zOffset),     // Main Straight End
-      new THREE.Vector3(12, 0, 65 + zOffset),    // Chicane Turn 1 entry
-      new THREE.Vector3(42, 0, 78 + zOffset),    // Chicane apex
-      new THREE.Vector3(70, 0, 62 + zOffset),    // Chicane exit
-      new THREE.Vector3(82, 0, 15 + zOffset),    // Back Straight
-      new THREE.Vector3(82, 0, -35 + zOffset),   // Approaching Hairpin
-      new THREE.Vector3(72, 0, -78 + zOffset),   // Hairpin braking zone
-      new THREE.Vector3(42, 0, -96 + zOffset),   // Hairpin Apex (heavy turn)
-      new THREE.Vector3(14, 0, -82 + zOffset),   // Hairpin exit
-      new THREE.Vector3(-14, 0, -68 + zOffset),  // S-Curve 1
-      new THREE.Vector3(-36, 0, -45 + zOffset),  // S-Curve 2
-      new THREE.Vector3(-46, 0, -10 + zOffset),  // Infield sweep
-      new THREE.Vector3(-40, 0, 25 + zOffset),   // Turn 5 entry
-      new THREE.Vector3(-24, 0, 42 + zOffset),   // Turn 5 apex
-      new THREE.Vector3(-8, 0, 10 + zOffset),    // Sweeper exit onto main straight
+      new THREE.Vector3(0, 0, -85 + zOffset),   // P0: Start-Finish Straight South (Z = 515)
+      new THREE.Vector3(0, 0, -10 + zOffset),   // P1: Start-Finish Gantry (Z = 590)
+      new THREE.Vector3(0, 0, 55 + zOffset),    // P2: End of Main Straight, Turn 1 Braking (Z = 655)
+      new THREE.Vector3(28, 0, 98 + zOffset),   // P3: Turn 1 Entry (Wide Right Sweeper)
+      new THREE.Vector3(68, 0, 112 + zOffset),  // P4: Turn 1 Apex
+      new THREE.Vector3(108, 0, 85 + zOffset),  // P5: Turn 2 Exit onto Back Straight
+      new THREE.Vector3(118, 0, 25 + zOffset),  // P6: Back Straight High-Speed Section
+      new THREE.Vector3(118, 0, -45 + zOffset), // P7: Back Straight Braking Zone (150m board)
+      new THREE.Vector3(98, 0, -105 + zOffset), // P8: Hairpin Entry (Turn 3)
+      new THREE.Vector3(55, 0, -125 + zOffset), // P9: Hairpin Apex (Wide & Smooth)
+      new THREE.Vector3(12, 0, -105 + zOffset), // P10: Hairpin Exit
+      new THREE.Vector3(-28, 0, -85 + zOffset), // P11: S-Curve 1 (Left Flick)
+      new THREE.Vector3(-58, 0, -48 + zOffset), // P12: S-Curve 2 (Right Transition)
+      new THREE.Vector3(-68, 0, 0 + zOffset),   // P13: Infield Straight
+      new THREE.Vector3(-58, 0, 52 + zOffset),  // P14: Parabolica Entry
+      new THREE.Vector3(-32, 0, 72 + zOffset),  // P15: Parabolica Mid-Apex
+      new THREE.Vector3(-10, 0, 20 + zOffset),  // P16: Parabolica Exit onto Straight
     ]
 
     this.trackCurve = new THREE.CatmullRomCurve3(controlPoints, true, 'centripetal', 0.5)
   }
 
+  private initSplineSamples() {
+    this.splineSamples = []
+    const count = 180
+    for (let i = 0; i < count; i++) {
+      const t = i / count
+      this.splineSamples.push({
+        point: this.trackCurve.getPoint(t),
+        tangent: this.trackCurve.getTangent(t).normalize(),
+        t,
+      })
+    }
+  }
+
+  /**
+   * Returns the exact tangent orientation of the road at any position on or near the circuit
+   */
+  public getTrackTangentAt(pos: THREE.Vector3): THREE.Vector3 {
+    let minDistSq = Infinity
+    let bestTangent = this.splineSamples[0].tangent
+
+    for (let i = 0; i < this.splineSamples.length; i++) {
+      const s = this.splineSamples[i]
+      const dx = s.point.x - pos.x
+      const dz = s.point.z - pos.z
+      const dSq = dx * dx + dz * dz
+      if (dSq < minDistSq) {
+        minDistSq = dSq
+        bestTangent = s.tangent
+      }
+    }
+    return bestTangent
+  }
+
   // --- 2. PROCEDURAL TRACK SURFACE ---
   private createRoadSurface() {
     // Infield & Outfield Grass Bed centered at Z = 600
-    const grassGeo = new THREE.PlaneGeometry(350, 350)
+    const grassGeo = new THREE.PlaneGeometry(420, 420)
     const grass = new THREE.Mesh(grassGeo, this.materials.grass)
     grass.rotation.x = -Math.PI / 2
-    grass.position.set(0, -0.01, this.offset.z)
+    grass.position.set(25, -0.01, this.offset.z)
     grass.receiveShadow = true
     grass.matrixAutoUpdate = false
     grass.updateMatrix()
@@ -194,8 +245,8 @@ export class RaceTrack {
       const left = pt.clone().addScaledVector(side, -halfW)
       const right = pt.clone().addScaledVector(side, halfW)
 
-      vertices.push(left.x, 0.01, left.z)
-      vertices.push(right.x, 0.01, right.z)
+      vertices.push(left.x, 0.015, left.z)
+      vertices.push(right.x, 0.015, right.z)
 
       const uvY = i * 0.8
       uvs.push(0, uvY)
@@ -295,51 +346,52 @@ export class RaceTrack {
   // --- 4. START/FINISH OVERHEAD GANTRY & CHECKERED LINE ---
   private createStartFinishGantry() {
     const gantry = new THREE.Group()
-    gantry.position.set(0, 0, this.offset.z) // At Start Line on Main Straight (Z = 600)
+    const gantryZ = -10 + this.offset.z // Z = 590
+    gantry.position.set(0, 0, gantryZ)
 
-    // Checkered Start / Finish Strip on Asphalt
-    const checkGeo = new THREE.PlaneGeometry(0.8, 0.8)
+    // Checkered Start / Finish Strip on Asphalt across the road
+    const checkGeo = new THREE.PlaneGeometry(0.85, 0.85)
     checkGeo.rotateX(-Math.PI / 2)
     const checkWhite = new THREE.MeshBasicMaterial({ color: 0xffffff })
     const checkBlack = new THREE.MeshBasicMaterial({ color: 0x111111 })
 
-    const numTiles = Math.floor(this.TRACK_WIDTH / 0.8)
+    const numTiles = Math.floor(this.TRACK_WIDTH / 0.85)
     for (let i = 0; i < numTiles; i++) {
       for (let row = 0; row < 2; row++) {
         const isWhite = (i + row) % 2 === 0
         const tile = new THREE.Mesh(checkGeo, isWhite ? checkWhite : checkBlack)
-        const posX = -this.TRACK_WIDTH / 2 + (i + 0.5) * 0.8
-        tile.position.set(posX, 0.02, (row - 0.5) * 0.8)
+        const posX = -this.TRACK_WIDTH / 2 + (i + 0.5) * 0.85
+        tile.position.set(posX, 0.025, (row - 0.5) * 0.85)
         gantry.add(tile)
       }
     }
 
-    // Overhead Truss Structure
-    const pillarGeo = new THREE.BoxGeometry(0.5, 6.5, 0.5)
+    // Overhead Truss Structure (Spans 20.5m across full track + margins)
+    const pillarGeo = new THREE.BoxGeometry(0.5, 7.0, 0.5)
     const leftPillar = new THREE.Mesh(pillarGeo, this.materials.overheadGantry)
-    leftPillar.position.set(-this.TRACK_WIDTH / 2 - 1.5, 3.25, 0)
+    leftPillar.position.set(-this.TRACK_WIDTH / 2 - 2.0, 3.5, 0)
     const rightPillar = new THREE.Mesh(pillarGeo, this.materials.overheadGantry)
-    rightPillar.position.set(this.TRACK_WIDTH / 2 + 1.5, 3.25, 0)
+    rightPillar.position.set(this.TRACK_WIDTH / 2 + 2.0, 3.5, 0)
 
-    const beamGeo = new THREE.BoxGeometry(this.TRACK_WIDTH + 4.0, 0.8, 0.8)
+    const beamGeo = new THREE.BoxGeometry(this.TRACK_WIDTH + 5.0, 0.9, 0.9)
     const beam = new THREE.Mesh(beamGeo, this.materials.overheadGantry)
-    beam.position.set(0, 6.2, 0)
+    beam.position.set(0, 6.7, 0)
 
     // Signboard
-    const signGeo = new THREE.BoxGeometry(this.TRACK_WIDTH - 2.0, 1.2, 0.15)
+    const signGeo = new THREE.BoxGeometry(this.TRACK_WIDTH - 2.0, 1.4, 0.15)
     const signMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3 })
     const sign = new THREE.Mesh(signGeo, signMat)
-    sign.position.set(0, 5.8, 0.4)
+    sign.position.set(0, 6.2, 0.45)
 
-    // Starting Lights (Red & Green pods)
-    for (let x = -3; x <= 3; x += 1.5) {
+    // Starting Lights (Red pods)
+    for (let x = -3.6; x <= 3.6; x += 1.8) {
       const podMat = new THREE.MeshStandardMaterial({
         color: 0xef4444,
         emissive: 0xdc2626,
-        emissiveIntensity: 2.0,
+        emissiveIntensity: 2.2,
       })
-      const pod = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 8), podMat)
-      pod.position.set(x, 4.8, 0.3)
+      const pod = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), podMat)
+      pod.position.set(x, 5.1, 0.4)
       gantry.add(pod)
     }
 
@@ -348,21 +400,21 @@ export class RaceTrack {
     gantry.updateMatrix()
     this.group.add(gantry)
 
-    // Physical colliders for gantry pillars
+    // Physical colliders for gantry pillars (safe outside road margins)
     this.physicsWorld.createStaticBoxCollider(
-      -this.TRACK_WIDTH / 2 - 1.5,
-      3.25,
-      this.offset.z,
+      -this.TRACK_WIDTH / 2 - 2.0,
+      3.5,
+      gantryZ,
       0.4,
-      3.25,
+      3.5,
       0.4
     )
     this.physicsWorld.createStaticBoxCollider(
-      this.TRACK_WIDTH / 2 + 1.5,
-      3.25,
-      this.offset.z,
+      this.TRACK_WIDTH / 2 + 2.0,
+      3.5,
+      gantryZ,
       0.4,
-      3.25,
+      3.5,
       0.4
     )
   }
@@ -371,40 +423,44 @@ export class RaceTrack {
   private createStartingGridBoxes() {
     const gridGroup = new THREE.Group()
     const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff })
-    const zOffset = this.offset.z
 
     const addGridBox = (x: number, z: number) => {
-      const frontLine = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.16).rotateX(-Math.PI / 2), lineMat)
-      frontLine.position.set(x, 0.02, z)
+      const frontLine = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.18).rotateX(-Math.PI / 2), lineMat)
+      frontLine.position.set(x, 0.025, z)
 
-      const leftLine = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 4.2).rotateX(-Math.PI / 2), lineMat)
-      leftLine.position.set(x - 1.2, 0.02, z - 2.1)
+      const leftLine = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 4.6).rotateX(-Math.PI / 2), lineMat)
+      leftLine.position.set(x - 1.3, 0.025, z - 2.3)
 
-      const rightLine = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 4.2).rotateX(-Math.PI / 2), lineMat)
-      rightLine.position.set(x + 1.2, 0.02, z - 2.1)
+      const rightLine = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 4.6).rotateX(-Math.PI / 2), lineMat)
+      rightLine.position.set(x + 1.3, 0.025, z - 2.3)
 
       gridGroup.add(frontLine, leftLine, rightLine)
     }
 
-    addGridBox(2.5, -30 + zOffset)   // P1 (Pole)
-    addGridBox(-2.5, -37 + zOffset)  // P2
-    addGridBox(2.5, -44 + zOffset)   // P3
-    addGridBox(-2.5, -51 + zOffset)  // P4
+    // Lined up nicely on the main straight before the finish gantry at Z = 590
+    addGridBox(2.8, 575)   // P1 (Pole)
+    addGridBox(-2.8, 565)  // P2
+    addGridBox(2.8, 555)   // P3
+    addGridBox(-2.8, 545)  // P4
+    addGridBox(2.8, 535)   // P5
+    addGridBox(-2.8, 525)  // P6
+    addGridBox(2.8, 515)   // P7
+    addGridBox(-2.8, 505)  // P8
 
     gridGroup.matrixAutoUpdate = false
     gridGroup.updateMatrix()
     this.group.add(gridGroup)
   }
 
-  // --- 6. CONTINUOUS TRACK BARRIERS & COLLIDERS ---
+  // --- 6. CONTINUOUS TRACK BARRIERS WITH ROTATED COLLIDERS ---
   private createTrackBarriers() {
     const points = this.trackCurve.getSpacedPoints(this.NUM_SEGMENTS)
-    const barrierDist = this.TRACK_WIDTH / 2 + this.KERB_WIDTH + 0.4
+    const barrierDist = this.TRACK_WIDTH / 2 + this.KERB_WIDTH + 0.5
     const up = new THREE.Vector3(0, 1, 0)
 
     const barrierGroup = new THREE.Group()
-
     const step = 2
+
     for (let i = 0; i < this.NUM_SEGMENTS; i += step) {
       const idx1 = i
       const idx2 = (i + step) % this.NUM_SEGMENTS
@@ -440,41 +496,50 @@ export class RaceTrack {
     const angle = Math.atan2(p2.x - p1.x, p2.z - p1.z)
 
     const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, 0.65, len),
+      new THREE.BoxGeometry(0.2, 0.75, len),
       this.materials.barrierArmco
     )
-    rail.position.set(mid.x, 0.42, mid.z)
+    rail.position.set(mid.x, 0.45, mid.z)
     rail.rotation.y = angle
     parent.add(rail)
 
     const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6),
+      new THREE.CylinderGeometry(0.08, 0.08, 0.85, 6),
       this.materials.barrierPost
     )
-    post.position.set(p1.x, 0.4, p1.z)
+    post.position.set(p1.x, 0.42, p1.z)
     parent.add(post)
 
-    // Rapier Physics Static Box Collider
-    const halfX = Math.abs(Math.sin(angle)) * (len / 2) + 0.25
-    const halfZ = Math.abs(Math.cos(angle)) * (len / 2) + 0.25
-    this.physicsWorld.createStaticBoxCollider(mid.x, 0.45, mid.z, halfX, 0.45, halfZ, 0.6, 0.2)
+    // Accurate ROTATED Rapier Physics Static Box Collider
+    // Thin 0.35m rail exactly matches 3D mesh, preventing any invisible blocking walls on the track!
+    this.physicsWorld.createStaticRotatedBoxCollider(
+      mid.x,
+      0.45,
+      mid.z,
+      0.18,          // halfX: thin barrier width (0.36m)
+      0.45,          // halfY: barrier height
+      len / 2 + 0.05,// halfZ: exact segment length
+      angle,         // rotation matching road curvature
+      0.55,
+      0.15
+    )
   }
 
-  // --- 7. CIRCUIT SCENERY (Grandstands, Trees, Brake Markers, Lights) ---
+  // --- 7. CIRCUIT SCENERY (Grandstands, Brake Markers, Outfield Trees) ---
   private createScenery() {
     const scenery = new THREE.Group()
     const zOffset = this.offset.z
 
     // 7.1 Spectator Grandstands along Main Straight
-    const standGeo = new THREE.BoxGeometry(6.0, 4.0, 50.0)
+    const standGeo = new THREE.BoxGeometry(8.0, 5.0, 75.0)
     const stand = new THREE.Mesh(standGeo, this.materials.bleachers)
-    stand.position.set(this.TRACK_WIDTH / 2 + 6.0, 2.0, -10.0 + zOffset)
+    stand.position.set(this.TRACK_WIDTH / 2 + 7.5, 2.5, -20.0 + zOffset)
     scenery.add(stand)
 
-    const canopyGeo = new THREE.BoxGeometry(8.0, 0.3, 52.0)
+    const canopyGeo = new THREE.BoxGeometry(10.0, 0.35, 78.0)
     const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 })
     const canopy = new THREE.Mesh(canopyGeo, canopyMat)
-    canopy.position.set(this.TRACK_WIDTH / 2 + 5.0, 5.2, -10.0 + zOffset)
+    canopy.position.set(this.TRACK_WIDTH / 2 + 6.5, 6.2, -20.0 + zOffset)
     canopy.rotation.z = -0.15
     scenery.add(canopy)
 
@@ -486,50 +551,55 @@ export class RaceTrack {
     ]
     markerDistances.forEach((m) => {
       const board = new THREE.Mesh(
-        new THREE.BoxGeometry(0.12, 1.2, 1.8),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 })
+        new THREE.BoxGeometry(0.12, 1.4, 2.0),
+        this.materials.brakeBoard
       )
-      board.position.set(-this.TRACK_WIDTH / 2 - 2.0, 0.9, m.z + zOffset)
+      board.position.set(-this.TRACK_WIDTH / 2 - 2.4, 1.0, m.z + zOffset)
       scenery.add(board)
     })
 
-    // 7.3 Stylized Low-Poly Pine Trees throughout the Infield
-    const treeTrunkGeo = new THREE.CylinderGeometry(0.2, 0.35, 2.4, 6)
-    const treeFoliageGeo = new THREE.ConeGeometry(1.6, 3.8, 6)
+    // 7.3 Trees positioned safely in the outfield (at least 25m away from track edges)
+    const treeTrunkGeo = new THREE.CylinderGeometry(0.24, 0.38, 2.6, 6)
+    const treeFoliageGeo = new THREE.ConeGeometry(1.8, 4.2, 6)
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x422a1d, roughness: 0.9 })
-    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8, flatShading: true })
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.8, flatShading: true })
 
-    const infieldTreePositions = [
-      { x: 15, z: 20 },
-      { x: 25, z: 0 },
-      { x: 35, z: -25 },
-      { x: 20, z: -50 },
-      { x: -10, z: -20 },
-      { x: -25, z: 10 },
-      { x: 55, z: 30 },
-      { x: 55, z: -40 },
-      { x: -55, z: -10 },
-      { x: 60, z: 85 },
-      { x: 80, z: -95 },
-      { x: 0, z: -110 },
+    const outfieldTreePositions = [
+      { x: -95, z: -110 },
+      { x: -110, z: -30 },
+      { x: -105, z: 60 },
+      { x: -75, z: 125 },
+      { x: -20, z: 135 },
+      { x: 50, z: 145 },
+      { x: 120, z: 135 },
+      { x: 155, z: 60 },
+      { x: 155, z: -20 },
+      { x: 145, z: -90 },
+      { x: 105, z: -145 },
+      { x: 35, z: -155 },
+      { x: -45, z: -145 },
+      // Safe center infield (well away from curves)
+      { x: 0, z: -20 },
+      { x: 35, z: 10 },
+      { x: 55, z: -30 },
     ]
 
-    infieldTreePositions.forEach((pos) => {
+    outfieldTreePositions.forEach((pos) => {
       const realZ = pos.z + zOffset
       const tree = new THREE.Group()
       tree.position.set(pos.x, 0, realZ)
 
       const trunk = new THREE.Mesh(treeTrunkGeo, trunkMat)
-      trunk.position.y = 1.2
+      trunk.position.y = 1.3
       tree.add(trunk)
 
       const foliage = new THREE.Mesh(treeFoliageGeo, foliageMat)
-      foliage.position.y = 3.6
+      foliage.position.y = 3.8
       tree.add(foliage)
 
       scenery.add(tree)
 
-      this.physicsWorld.createStaticBoxCollider(pos.x, 1.5, realZ, 0.4, 1.5, 0.4)
+      this.physicsWorld.createStaticBoxCollider(pos.x, 1.5, realZ, 0.45, 1.5, 0.45)
     })
 
     scenery.matrixAutoUpdate = false
@@ -540,17 +610,19 @@ export class RaceTrack {
   // --- 8. CIRCUIT CHECKPOINTS SYSTEM ---
   private setupCheckpoints() {
     const tValues = [
-      { t: 0.0, name: 'Bitiş Çizgisi' },
-      { t: 0.22, name: 'Şikan Çıkışı' },
-      { t: 0.40, name: 'Arka Düzlük' },
-      { t: 0.55, name: 'Viraj 3 (Hairpin)' },
-      { t: 0.72, name: 'S-Virajları' },
-      { t: 0.88, name: 'Son Viraj' },
+      { t: 0.045, name: 'Bitiş Çizgisi' },
+      { t: 0.16,  name: 'Viraj 1 Girişi' },
+      { t: 0.28,  name: 'Viraj 2 Çıkışı' },
+      { t: 0.40,  name: 'Arka Düzlük' },
+      { t: 0.54,  name: 'Viraj 3 (Hairpin)' },
+      { t: 0.67,  name: 'S-Virajları' },
+      { t: 0.79,  name: 'İç Düzlük' },
+      { t: 0.91,  name: 'Son Viraj (Parabolica)' },
     ]
 
     this.checkpoints = tValues.map((item, index) => {
       const pos = this.trackCurve.getPoint(item.t)
-      const forward = this.trackCurve.getTangent(item.t)
+      const forward = this.trackCurve.getTangent(item.t).normalize()
       return {
         id: index,
         name: item.name,
@@ -603,9 +675,6 @@ export class RaceTrack {
     return this.spawnPoints[0]
   }
 
-  /**
-   * Get respawn position and forward orientation for a given checkpoint index.
-   */
   public getCheckpointRespawn(checkpointIndex: number): { position: THREE.Vector3; rotationY: number; name: string } {
     if (!this.checkpoints || this.checkpoints.length === 0) {
       const pole = this.getPolePosition()
@@ -633,4 +702,3 @@ export class RaceTrack {
     return [this.materials.asphalt]
   }
 }
-

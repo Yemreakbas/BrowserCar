@@ -2694,7 +2694,7 @@ async function bootstrap() {
       } else {
         btnRaceReady.classList.remove('is-ready')
         btnRaceReadyIcon.textContent = '⚪'
-        btnRaceReadyText.textContent = 'HAZIRIM (BOŞLUK)'
+        btnRaceReadyText.textContent = 'HAZIRIM (G / Tıkla)'
       }
     } else if (raceState === OnlineRaceState.COUNTDOWN) {
       onlineRaceStatusBadge.className = 'online-race-badge countdown'
@@ -2825,7 +2825,7 @@ async function bootstrap() {
       } else {
         btnDriftReady.classList.remove('is-ready')
         btnDriftReadyIcon.textContent = '⚪'
-        btnDriftReadyText.textContent = 'HAZIRIM (BOŞLUK)'
+        btnDriftReadyText.textContent = 'HAZIRIM (G / Tıkla)'
       }
 
       const rowsHtml = currentRoom.players
@@ -3010,32 +3010,24 @@ async function bootstrap() {
       case 'ShiftRight':
         keys.nitro = true
         break
-      case 'Space': {
+      case 'Space':
+        keys.handbrake = true
+        break
+      case 'KeyG': {
         const activeMode = modeManager.getActiveMode()
         if (activeMode.modeType === GameModeType.RACE) {
-          const currentRoom = networkManager.getCurrentRoom()
-          if (currentRoom && currentRoom.mode === 'RACE' && (!currentRoom.raceState || currentRoom.raceState === OnlineRaceState.LOBBY)) {
-            e.preventDefault()
-            const raceMode = modeManager.getMode(GameModeType.RACE) as RaceMode
-            if (raceMode) {
-              raceMode.toggleReady(modeManager['context'])
-              updateOnlineRaceCard()
-            }
-            break
+          const raceMode = modeManager.getMode(GameModeType.RACE) as RaceMode
+          if (raceMode) {
+            raceMode.toggleReady(modeManager['context'])
+            updateOnlineRaceCard()
           }
         } else if (activeMode.modeType === GameModeType.DRIFT) {
-          const currentRoom = networkManager.getCurrentRoom()
-          if (currentRoom && currentRoom.mode === 'DRIFT' && (!currentRoom.driftState || currentRoom.driftState === OnlineDriftState.LOBBY)) {
-            e.preventDefault()
-            const driftMode = modeManager.getMode(GameModeType.DRIFT) as DriftMode
-            if (driftMode) {
-              driftMode.toggleReady(modeManager['context'])
-              updateOnlineDriftCard()
-            }
-            break
+          const driftMode = modeManager.getMode(GameModeType.DRIFT) as DriftMode
+          if (driftMode) {
+            driftMode.toggleReady(modeManager['context'])
+            updateOnlineDriftCard()
           }
         }
-        keys.handbrake = true
         break
       }
       case 'KeyM':
