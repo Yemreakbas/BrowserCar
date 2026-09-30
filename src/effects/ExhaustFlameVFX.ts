@@ -16,7 +16,7 @@ export class ExhaustFlameVFX {
   public group: THREE.Group
   private flameCones: THREE.Mesh[] = []
   private coreCones: THREE.Mesh[] = []
-  private nitroLight: THREE.PointLight
+  private nitroLight: THREE.PointLight | null = null
   private sparks: FlameSpark[] = []
   private maxSparks = 24
   private sparkIndex = 0
@@ -27,6 +27,7 @@ export class ExhaustFlameVFX {
 
   private time: number = 0
   private isActive: boolean = false
+  public enableLight: boolean
 
   // Exhaust nozzle offsets relative to car chassis center (Sedan & Sports models)
   private nozzleOffsets: THREE.Vector3[] = [
@@ -34,7 +35,8 @@ export class ExhaustFlameVFX {
     new THREE.Vector3(0.42, 0.22, -1.8),  // Right pipe
   ]
 
-  constructor(parent: THREE.Object3D) {
+  constructor(parent: THREE.Object3D, enableLight: boolean = true) {
+    this.enableLight = enableLight
     this.group = new THREE.Group()
     this.group.name = 'ExhaustFlameVFX'
     parent.add(this.group)
@@ -87,10 +89,13 @@ export class ExhaustFlameVFX {
       this.coreCones.push(innerMesh)
     }
 
-    // 3. Ground Glow Light (Illuminates asphalt and smoke behind the car)
-    this.nitroLight = new THREE.PointLight(0x00f0ff, 0, 5.5, 2.0)
-    this.nitroLight.position.set(0, 0.35, -1.9)
-    this.group.add(this.nitroLight)
+    // 3. Ground Glow Light (Illuminates asphalt and smoke behind the car - Player only)
+    if (this.enableLight) {
+      this.nitroLight = new THREE.PointLight(0x00f0ff, 0, 5.5, 2.0)
+      this.nitroLight.position.set(0, 0.35, -1.9)
+      this.nitroLight.visible = false
+      this.group.add(this.nitroLight)
+    }
 
     // 4. Spark Particles
     const sparkGeo = new THREE.SphereGeometry(0.045, 6, 6)
@@ -119,8 +124,14 @@ export class ExhaustFlameVFX {
       mesh.visible = active
     }
 
+    if (this.nitroLight) {
+      this.nitroLight.visible = active
+      if (!active) {
+        this.nitroLight.intensity = 0
+      }
+    }
+
     if (!active) {
-      this.nitroLight.intensity = 0
       for (const spark of this.sparks) {
         spark.active = false
         spark.mesh.visible = false
@@ -150,8 +161,10 @@ export class ExhaustFlameVFX {
         inner.scale.set(baseScaleXY * 0.9 * intensity, baseScaleXY * 0.9 * intensity, baseScaleZ * 1.1 * intensity)
       }
 
-      // Neon ground illumination pulse
-      this.nitroLight.intensity = (2.4 + Math.sin(this.time * 1.5) * 0.6) * intensity
+      // Neon ground illumination pulse (only when enabled and active)
+      if (this.nitroLight) {
+        this.nitroLight.intensity = (2.4 + Math.sin(this.time * 1.5) * 0.6) * intensity
+      }
 
       // Emit sparks from random nozzle
       if (Math.random() < 0.65) {
@@ -211,6 +224,9 @@ export class ExhaustFlameVFX {
     this.flameCones.forEach((m) => m.geometry.dispose())
     this.coreCones.forEach((m) => m.geometry.dispose())
     this.sparks.forEach((s) => s.mesh.geometry.dispose())
+    if (this.nitroLight && this.nitroLight.parent) {
+      this.nitroLight.parent.remove(this.nitroLight)
+    }
     if (this.group.parent) {
       this.group.parent.remove(this.group)
     }

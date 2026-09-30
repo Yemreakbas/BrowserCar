@@ -14,6 +14,7 @@ export class DayNightCycle {
   public cycleSpeed: number = 24 / 480 // 1 full day every 8 minutes if auto
   public activePreset: TimePreset = 'DAY'
   public currentSunOffset = new THREE.Vector3(40, 60, 30)
+  private followTarget = new THREE.Vector3(0, 0, 0)
 
   // Starfield celestial dome
   private starsPoints: THREE.Points | null = null
@@ -188,7 +189,6 @@ export class DayNightCycle {
       starOpacity = 0.0
 
       this.currentSunOffset.set(sunX, sunY, sunZ)
-      this.sunLight.position.set(sunX, sunY, sunZ)
     } else if (this.timeOfDay >= 17.0 && this.timeOfDay < 19.5) {
       // --- GOLDEN HOUR / SUNSET ---
       const sunsetFactor = (this.timeOfDay - 17.0) / 2.5
@@ -204,7 +204,6 @@ export class DayNightCycle {
       starOpacity = THREE.MathUtils.lerp(0.0, 0.45, sunsetFactor)
 
       this.currentSunOffset.set(sunX, sunY, sunZ)
-      this.sunLight.position.set(sunX, sunY, sunZ)
     } else if (this.timeOfDay >= 19.5 || this.timeOfDay < 5.0) {
       // --- CYBERPUNK MIDNIGHT / NEON NIGHT ---
       targetSunColor.setHex(0x7dd3fc) // Lunar pale cyan moonlight
@@ -220,7 +219,6 @@ export class DayNightCycle {
 
       // Light acts as Moon at night
       this.currentSunOffset.set(moonX, moonY, moonZ)
-      this.sunLight.position.set(moonX, moonY, moonZ)
     } else {
       // --- DAWN / MORNING SUNRISE ---
       const dawnFactor = (this.timeOfDay - 5.0) / 3.0
@@ -236,8 +234,19 @@ export class DayNightCycle {
       starOpacity = THREE.MathUtils.lerp(0.8, 0.0, dawnFactor)
 
       this.currentSunOffset.set(sunX, sunY, sunZ)
-      this.sunLight.position.set(sunX, sunY, sunZ)
     }
+
+    // Keep sunlight and shadow camera centered relative to followed vehicle
+    this.sunLight.position.set(
+      this.followTarget.x + this.currentSunOffset.x,
+      this.currentSunOffset.y,
+      this.followTarget.z + this.currentSunOffset.z
+    )
+    this.sunLight.target.position.copy(this.followTarget)
+    this.sunLight.target.updateMatrixWorld()
+
+    // Disable shadow map calculation at night to save massive fillrate
+    this.sunLight.castShadow = !this.isNight()
 
     // 3. Apply Smooth Transitions
     const lerpRate = forceInstant ? 1.0 : Math.min(delta * 4.5, 0.95)
@@ -282,12 +291,13 @@ export class DayNightCycle {
   }
 
   public updateShadowFollow(carPos: THREE.Vector3) {
+    this.followTarget.copy(carPos)
     this.sunLight.position.set(
-      carPos.x + this.currentSunOffset.x,
+      this.followTarget.x + this.currentSunOffset.x,
       this.currentSunOffset.y,
-      carPos.z + this.currentSunOffset.z
+      this.followTarget.z + this.currentSunOffset.z
     )
-    this.sunLight.target.position.copy(carPos)
+    this.sunLight.target.position.copy(this.followTarget)
     this.sunLight.target.updateMatrixWorld()
   }
 }

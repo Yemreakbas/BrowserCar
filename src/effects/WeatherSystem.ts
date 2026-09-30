@@ -208,10 +208,11 @@ export class WeatherSystem {
       })
     }
 
-    // 3. Setup Lightning Light
+    // 3. Setup Lightning Light (hidden by default to avoid forward pass overhead)
     this.lightningLight = new THREE.DirectionalLight(0xe0f2fe, 0)
     this.lightningLight.position.set(20, 120, 20)
     this.lightningLight.name = 'WeatherLightningLight'
+    this.lightningLight.visible = false
     this.scene.add(this.lightningLight)
   }
 
@@ -251,6 +252,7 @@ export class WeatherSystem {
     this.lightningTimer = 5.0 + Math.random() * 6.0
     this.isFlashing = false
     this.lightningLight.intensity = 0
+    this.lightningLight.visible = false
 
     if (this.onWeatherChanged) {
       this.onWeatherChanged(type, preset)
@@ -497,6 +499,7 @@ export class WeatherSystem {
     this.flashTimer = 0.08
     this.lightningLight.position.set(camPos.x + 30, camPos.y + 110, camPos.z + 20)
     this.lightningLight.intensity = 4.8
+    this.lightningLight.visible = true
 
     // Schedule delayed thunder rumble
     this.thunderDelayTimer = 0.35 + Math.random() * 0.55
@@ -518,6 +521,7 @@ export class WeatherSystem {
       this.isFlashing = false
       this.flashStage = 0
       this.lightningLight.intensity = 0
+      this.lightningLight.visible = false
     }
   }
 

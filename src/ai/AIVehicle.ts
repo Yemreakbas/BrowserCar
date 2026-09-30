@@ -92,8 +92,8 @@ export class AIVehicle {
     this.bodyGroup.name = `AIBody_${this.id}`
     this.root.add(this.bodyGroup)
 
-    this.flameVFX = new ExhaustFlameVFX(this.bodyGroup)
-    this.headlights = new VehicleHeadlights(this.bodyGroup)
+    this.flameVFX = new ExhaustFlameVFX(this.bodyGroup, false)
+    this.headlights = new VehicleHeadlights(this.bodyGroup, false)
 
     this.createPlaceholder(config.color)
     this.createNameplate(config.color)
@@ -245,8 +245,8 @@ export class AIVehicle {
     this.isFinished = false
     this.isNitro = false
     this.nitroTimer = 0
-    this.nitroCooldown = 2.0
-    this.flameVFX.update(0.016, false, 0)
+    this.flameVFX.setActive(false)
+    this.flameVFX.update(0.016, 0)
   }
 
   public update(
@@ -256,7 +256,8 @@ export class AIVehicle {
   ) {
     if (this.isLocked) {
       this.currentSpeed = 0
-      this.flameVFX.update(delta, false, 0)
+      this.flameVFX.setActive(false)
+      this.flameVFX.update(delta, 0)
       this.headlights.update(delta, false, isNight)
       return
     }
@@ -418,7 +419,8 @@ export class AIVehicle {
     }
 
     // 9. Exhaust Flames & Headlights
-    this.flameVFX.update(delta, this.isNitro, this.currentSpeed)
+    this.flameVFX.setActive(this.isNitro)
+    this.flameVFX.update(delta, this.isNitro ? 1.0 : 0.0)
     this.headlights.update(delta, avoidanceBrake, isNight)
   }
 

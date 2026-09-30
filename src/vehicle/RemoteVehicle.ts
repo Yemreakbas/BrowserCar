@@ -82,7 +82,7 @@ export class RemoteVehicle {
 
     this.createPlaceholder()
     this.createNameplate()
-    this.flameVFX = new ExhaustFlameVFX(this.root)
+    this.flameVFX = new ExhaustFlameVFX(this.root, false)
     this.loadKenneyModel('/assets/cars/sedan-sports.glb')
 
     this.scene.add(this.root)

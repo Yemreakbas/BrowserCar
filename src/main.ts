@@ -3163,6 +3163,10 @@ async function bootstrap() {
   let lastHudGear = ''
   let lastProgressMode = ''
   let lastProgressPct = -1
+  let lastHudSpeed = -1
+  let lastNitroValStr = ''
+  let lastNitroActiveState = false
+  let lastNitroEmptyState = false
 
   function animate() {
     requestAnimationFrame(animate)
@@ -3344,21 +3348,32 @@ async function bootstrap() {
     // 9.5 Polished Third-Person Follow Camera (Phase 20)
     followCamera.update(delta)
 
-    // 9.6 HUD Speedometer, Gear & Nitro Gauge Update (Phase 31)
-    hudSpeed.textContent = speedKmh.toString()
-
-    const speedPercent = Math.min(speedKmh / (vehicle.config.maxForwardSpeed * 3.6), 1.0) * 100
-    hudSpeedBar.style.width = `${speedPercent}%`
+    // 9.6 HUD Speedometer, Gear & Nitro Gauge Update (Phase 31 - Cached DOM updates)
+    if (speedKmh !== lastHudSpeed) {
+      lastHudSpeed = speedKmh
+      hudSpeed.textContent = speedKmh.toString()
+      const speedPercent = Math.min(speedKmh / (vehicle.config.maxForwardSpeed * 3.6), 1.0) * 100
+      hudSpeedBar.style.width = `${speedPercent}%`
+    }
 
     if (hudNitroBar) {
       hudNitroBar.style.width = `${Math.max(0, Math.min(100, vehicle.nitroPercent))}%`
     }
-    if (hudNitroVal) {
-      hudNitroVal.textContent = vehicle.isNitroActive ? 'BOOST!' : `${Math.round(vehicle.nitroPercent)}%`
+    const nitroStr = vehicle.isNitroActive ? 'BOOST!' : `${Math.round(vehicle.nitroPercent)}%`
+    if (hudNitroVal && nitroStr !== lastNitroValStr) {
+      lastNitroValStr = nitroStr
+      hudNitroVal.textContent = nitroStr
     }
+    const isNitroEmpty = vehicle.nitroPercent < 6
     if (hudNitroContainer) {
-      hudNitroContainer.classList.toggle('nitro-active', vehicle.isNitroActive)
-      hudNitroContainer.classList.toggle('nitro-empty', vehicle.nitroPercent < 6)
+      if (vehicle.isNitroActive !== lastNitroActiveState) {
+        lastNitroActiveState = vehicle.isNitroActive
+        hudNitroContainer.classList.toggle('nitro-active', vehicle.isNitroActive)
+      }
+      if (isNitroEmpty !== lastNitroEmptyState) {
+        lastNitroEmptyState = isNitroEmpty
+        hudNitroContainer.classList.toggle('nitro-empty', isNitroEmpty)
+      }
     }
 
     const currentGearStr = Math.abs(vehicle.currentSpeed) < 0.2 ? 'N' : vehicle.currentSpeed > 0 ? 'D' : 'R'
