@@ -14,6 +14,7 @@ import { DriftMode } from './modes/DriftMode.ts'
 import { AIManager } from './ai/AIManager.ts'
 import { DayNightCycle, type TimePreset } from './effects/DayNightCycle.ts'
 import { WeatherSystem, type WeatherType, type WeatherPreset } from './effects/WeatherSystem.ts'
+import { PoliceChaseSystem } from './effects/PoliceChaseSystem.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
 import { NetworkManager } from './networking/NetworkManager.ts'
@@ -116,6 +117,11 @@ app.innerHTML = `
           <span id="weather-btn-icon" style="font-size: 13px;">☀️</span>
           <span id="weather-btn-text">Açık</span>
           <span class="reset-key-hint">Y</span>
+        </button>
+        <button id="btn-police" class="reset-btn" type="button" title="Polis Takibi & Heat Seviyesi (J)">
+          <span id="police-btn-icon" style="font-size: 13px;">🚨</span>
+          <span id="police-btn-text">Polis</span>
+          <span class="reset-key-hint">J</span>
         </button>
       </div>
     </header>
@@ -230,6 +236,28 @@ app.innerHTML = `
           </div>
           <div class="health-bar-track">
             <div id="hud-health-bar" class="health-bar-fill" style="width: 100%;"></div>
+          </div>
+        </div>
+        <!-- Police Pursuit & Heat Level Gauge (Phase 31.6) -->
+        <div id="hud-police-container" class="police-heat-container" style="display: none;">
+          <div class="police-heat-header">
+            <div class="police-stars-group" id="police-stars">
+              <span class="police-star" data-star="1">★</span>
+              <span class="police-star" data-star="2">★</span>
+              <span class="police-star" data-star="3">★</span>
+              <span class="police-star" data-star="4">★</span>
+              <span class="police-star" data-star="5">★</span>
+            </div>
+            <span id="police-status-badge" class="police-status-badge">🚨 ARANIYOR</span>
+          </div>
+          <div id="police-progress-container" class="police-progress-container" style="display: none;">
+            <div class="police-progress-header">
+              <span id="police-progress-label" class="police-progress-label">KAÇIŞ</span>
+              <span id="police-progress-val" class="police-progress-val">0%</span>
+            </div>
+            <div class="police-bar-track">
+              <div id="police-bar-fill" class="police-bar-fill" style="width: 0%;"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -866,6 +894,13 @@ const hudNitroContainer = document.querySelector<HTMLDivElement>('#hud-nitro-con
 const hudHealthBar = document.querySelector<HTMLDivElement>('#hud-health-bar')!
 const hudHealthVal = document.querySelector<HTMLSpanElement>('#hud-health-val')!
 const hudHealthContainer = document.querySelector<HTMLDivElement>('#hud-health-container')!
+const hudPoliceContainer = document.querySelector<HTMLDivElement>('#hud-police-container')!
+const policeStars = document.querySelectorAll<HTMLSpanElement>('.police-star')!
+const policeStatusBadge = document.querySelector<HTMLSpanElement>('#police-status-badge')!
+const policeProgressContainer = document.querySelector<HTMLDivElement>('#police-progress-container')!
+const policeProgressLabel = document.querySelector<HTMLSpanElement>('#police-progress-label')!
+const policeProgressVal = document.querySelector<HTMLSpanElement>('#police-progress-val')!
+const policeBarFill = document.querySelector<HTMLDivElement>('#police-bar-fill')!
 
 const keyW = document.querySelector<HTMLDivElement>('#key-w')!
 const keyA = document.querySelector<HTMLDivElement>('#key-a')!
@@ -889,6 +924,9 @@ const headlightsBtnText = document.querySelector<HTMLSpanElement>('#headlights-b
 const btnWeather = document.querySelector<HTMLButtonElement>('#btn-weather')!
 const weatherBtnIcon = document.querySelector<HTMLSpanElement>('#weather-btn-icon')!
 const weatherBtnText = document.querySelector<HTMLSpanElement>('#weather-btn-text')!
+const btnPolice = document.querySelector<HTMLButtonElement>('#btn-police')!
+const policeBtnIcon = document.querySelector<HTMLSpanElement>('#police-btn-icon')!
+const policeBtnText = document.querySelector<HTMLSpanElement>('#police-btn-text')!
 const spawnBtnText = document.querySelector<HTMLSpanElement>('#spawn-btn-text')!
 
 const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
@@ -1113,7 +1151,7 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: 'high-performance',
 })
 renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFShadowMap
 renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -1572,6 +1610,59 @@ async function bootstrap() {
   vehicle.damageSystem.onRepaired = () => {
     updateHealthUI(100, 100)
   }
+
+  // 7f. Initialize Police Chase & Heat System (Phase 31.6)
+  const policeChase = new PoliceChaseSystem(scene, audioManager)
+
+  const updatePoliceUI = (level: number) => {
+    if (level === 0) {
+      hudPoliceContainer.style.display = 'none'
+      btnPolice.classList.remove('police-active')
+      policeBtnText.textContent = 'Polis'
+    } else {
+      hudPoliceContainer.style.display = 'flex'
+      btnPolice.classList.add('police-active')
+      policeBtnText.textContent = `★ ${level}`
+    }
+
+    policeStars.forEach((star, idx) => {
+      star.classList.toggle('active', idx < level)
+    })
+  }
+
+  policeChase.onHeatChanged = (level) => {
+    updatePoliceUI(level)
+  }
+
+  policeChase.onPursuitStateChanged = (_state, text) => {
+    policeStatusBadge.textContent = text
+  }
+
+  policeChase.onBusted = (fine) => {
+    showResetToast(`🚨 YAKALANDIN! -${fine} CR CEZA KESİLDİ`, 'alert', 3500)
+    triggerScreenFlash()
+    playerProfileManager.addCash(-fine)
+    setTimeout(() => {
+      vehicleResetSystem.respawn('manual')
+    }, 1500)
+  }
+
+  policeChase.onEscaped = (reward) => {
+    showResetToast(`✨ POLİSTEN KAÇTIN! +${reward} CR KAZANDIN`, 'info', 3200)
+    playerProfileManager.addCash(reward)
+  }
+
+  const togglePoliceChase = () => {
+    policeChase.toggleChase()
+    audioManager.playClick()
+    if (policeChase.heatLevel > 0) {
+      showResetToast(`🚨 Polis Takibi Başlatıldı! (Seviye ${policeChase.heatLevel})`, 'alert', 1800)
+    } else {
+      showResetToast('🚓 Polis Takibi İptal Edildi', 'info', 1400)
+    }
+  }
+
+  btnPolice.addEventListener('click', togglePoliceChase)
 
   // 8. Initialize AI Manager & Mode Manager (Default: City Free Roam)
 
@@ -2988,6 +3079,9 @@ async function bootstrap() {
       case 'KeyY':
         cycleWeather()
         break
+      case 'KeyJ':
+        togglePoliceChase()
+        break
 
       case 'F3':
         e.preventDefault()
@@ -3068,6 +3162,7 @@ async function bootstrap() {
   let lastTopSpeedSubmitTime = 0
   const lastShadowPos = new THREE.Vector3(-9999, -9999, -9999)
   const weatherCarVel = new THREE.Vector3()
+  let lastHudGear = ''
 
   function animate() {
     requestAnimationFrame(animate)
@@ -3107,11 +3202,40 @@ async function bootstrap() {
       if (dmg > 10) {
         triggerScreenFlash()
       }
+      policeChase.addHeatScore(Math.min(speedDrop * 2.0, 18))
     }
     previousVehicleSpeed = vehicle.currentSpeed
 
     // 9.2d Vehicle Damage & Smoke/Sparks Update (Phase 31.5)
     vehicle.damageSystem.update(delta, vehicle.root.position, weatherCarVel, vehicle.getForwardVector())
+
+    // 9.2e Police Chase & Heat System Simulation (Phase 31.6)
+    if (modeManager.getActiveMode().modeType === GameModeType.CITY) {
+      if (speedKmh > 115) {
+        policeChase.addHeatScore(delta * 2.5)
+      }
+      if (vehicle.isDrifting && Math.abs(vehicle.slipAngle) > 0.45 && speedKmh > 40) {
+        policeChase.addHeatScore(delta * 2.0)
+      }
+    }
+    policeChase.update(delta, vehicle)
+    if (policeChase.heatLevel > 0) {
+      if (policeChase.bustPercent > 0) {
+        policeProgressContainer.style.display = 'flex'
+        policeProgressLabel.textContent = 'KISKAÇ'
+        policeProgressVal.textContent = `%${policeChase.bustPercent}`
+        policeBarFill.style.width = `${policeChase.bustPercent}%`
+        policeBarFill.className = 'police-bar-fill'
+      } else if (policeChase.pursuitState === 'EVADING') {
+        policeProgressContainer.style.display = 'flex'
+        policeProgressLabel.textContent = 'KAÇIŞ'
+        policeProgressVal.textContent = `%${policeChase.escapePercent}`
+        policeBarFill.style.width = `${policeChase.escapePercent}%`
+        policeBarFill.className = 'police-bar-fill evade'
+      } else {
+        policeProgressContainer.style.display = 'none'
+      }
+    }
 
 
     const throttle = keys.forward ? 1.0 : (keys.backward && vehicle.currentSpeed < -0.2 ? 0.75 : 0.0)
@@ -3198,7 +3322,7 @@ async function bootstrap() {
     // 9.5 Directional Sunlight Cascade (follows vehicle for sharp local shadows, throttled when car moves)
     const carPos = vehicle.root.position
     const shadowDistSq = carPos.distanceToSquared(lastShadowPos)
-    if (shadowDistSq > 0.02) {
+    if (shadowDistSq > 0.64) {
       lastShadowPos.copy(carPos)
       dayNightCycle.updateShadowFollow(carPos)
     }
@@ -3223,15 +3347,11 @@ async function bootstrap() {
       hudNitroContainer.classList.toggle('nitro-empty', vehicle.nitroPercent < 6)
     }
 
-    if (Math.abs(vehicle.currentSpeed) < 0.2) {
-      hudGear.textContent = 'N'
-      hudGear.className = 'gear-badge neutral'
-    } else if (vehicle.currentSpeed > 0) {
-      hudGear.textContent = 'D'
-      hudGear.className = 'gear-badge'
-    } else {
-      hudGear.textContent = 'R'
-      hudGear.className = 'gear-badge reverse'
+    const currentGearStr = Math.abs(vehicle.currentSpeed) < 0.2 ? 'N' : vehicle.currentSpeed > 0 ? 'D' : 'R'
+    if (currentGearStr !== lastHudGear) {
+      lastHudGear = currentGearStr
+      hudGear.textContent = currentGearStr
+      hudGear.className = currentGearStr === 'N' ? 'gear-badge neutral' : currentGearStr === 'D' ? 'gear-badge' : 'gear-badge reverse'
     }
 
     // 9.7 FPS & Performance Monitor Update (Phase 26)
@@ -3276,7 +3396,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
 })
 
 // Start Application

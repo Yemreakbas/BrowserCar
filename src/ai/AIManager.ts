@@ -21,6 +21,10 @@ export class AIManager {
   public isEnabled: boolean = true
   public activeMode: 'NONE' | 'RACE' | 'CITY' = 'NONE'
 
+  // Zero-allocation obstacle cache for 60+ FPS
+  private obstaclesPool: Array<{ position: THREE.Vector3; speed: number; forward: THREE.Vector3 }> = []
+  private playerForward = new THREE.Vector3()
+
   // Predefined AI Opponent Profiles
   private static readonly RACER_PROFILES = [
     {
@@ -228,32 +232,35 @@ export class AIManager {
     }
 
     const playerPos = playerVehicle.root.position
-    const playerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerVehicle.root.quaternion)
+    this.playerForward.set(0, 0, 1).applyQuaternion(playerVehicle.root.quaternion)
 
-    // Build obstacle list
-    const obstacles: Array<{ position: THREE.Vector3; speed: number; forward: THREE.Vector3 }> = [
-      {
-        position: playerPos,
-        speed: playerVehicle.currentSpeed,
-        forward: playerForward,
-      },
-    ]
-
-    for (const v of this.vehicles) {
-      const vForward = new THREE.Vector3(0, 0, 1).applyQuaternion(v.root.quaternion)
-      obstacles.push({
-        position: v.root.position,
-        speed: v.currentSpeed,
-        forward: vForward,
+    const neededCount = 1 + this.vehicles.length
+    while (this.obstaclesPool.length < neededCount) {
+      this.obstaclesPool.push({
+        position: new THREE.Vector3(),
+        speed: 0,
+        forward: new THREE.Vector3(),
       })
     }
 
-    // Update each AI vehicle
+    // Slot 0: Player
+    this.obstaclesPool[0].position.copy(playerPos)
+    this.obstaclesPool[0].speed = playerVehicle.currentSpeed
+    this.obstaclesPool[0].forward.copy(this.playerForward)
+
+    // Slots 1..N: AI Vehicles
     for (let i = 0; i < this.vehicles.length; i++) {
       const v = this.vehicles[i]
-      // Exclude self from obstacle list
-      const otherObstacles = obstacles.filter((_, idx) => idx !== i + 1)
-      v.update(delta, otherObstacles, isNight)
+      const obs = this.obstaclesPool[i + 1]
+      obs.position.copy(v.root.position)
+      obs.speed = v.currentSpeed
+      obs.forward.set(0, 0, 1).applyQuaternion(v.root.quaternion)
+    }
+
+    // Pass active obstacles to each AI vehicle
+    const activeObstacles = this.obstaclesPool.length === neededCount ? this.obstaclesPool : this.obstaclesPool.slice(0, neededCount)
+    for (let i = 0; i < this.vehicles.length; i++) {
+      this.vehicles[i].update(delta, activeObstacles, isNight)
     }
 
     // If in Race Mode, calculate player standings

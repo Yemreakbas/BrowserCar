@@ -59,6 +59,13 @@ export class AudioManager {
   private isRainAudioRunning: boolean = false
   private currentRainIntensity: number = 0
 
+  // Police siren procedural audio nodes (Phase 31.6)
+  private sirenOsc: OscillatorNode | null = null
+  private sirenLfo: OscillatorNode | null = null
+  private sirenGain: GainNode | null = null
+  private sirenFilter: BiquadFilterNode | null = null
+  private isSirenRunning: boolean = false
+
 
   // Asset buffer storage
   private audioBuffers: Map<SoundKey, AudioBuffer> = new Map()
@@ -407,6 +414,97 @@ export class AudioManager {
     noiseGain.connect(this.sfxGain)
     noiseSource.start(now + 0.05)
   }
+
+  /**
+   * Starts looping procedural dual-tone police wailing siren (Phase 31.6)
+   */
+  public startPoliceSiren(): void {
+    if (!this.ctx || !this.sfxGain || this.isSirenRunning) return
+    const now = this.ctx.currentTime
+
+    // 1. Create main siren oscillator (warm sawtooth with lowpass filter)
+    this.sirenOsc = this.ctx.createOscillator()
+    this.sirenOsc.type = 'sawtooth'
+    this.sirenOsc.frequency.setValueAtTime(750, now)
+
+    // 2. Lowpass filter to soften harsh harmonics
+    this.sirenFilter = this.ctx.createBiquadFilter()
+    this.sirenFilter.type = 'lowpass'
+    this.sirenFilter.frequency.setValueAtTime(1600, now)
+
+    // 3. Siren volume gain
+    this.sirenGain = this.ctx.createGain()
+    this.sirenGain.gain.setValueAtTime(0.0, now)
+
+    // 4. LFO to sweep pitch between 650 Hz and 980 Hz at ~0.38 Hz (classic American Wail siren)
+    this.sirenLfo = this.ctx.createOscillator()
+    this.sirenLfo.type = 'sine'
+    this.sirenLfo.frequency.setValueAtTime(0.38, now)
+
+    const lfoGain = this.ctx.createGain()
+    lfoGain.gain.setValueAtTime(180, now) // sweeps +/- 180 Hz around 750 Hz (570 to 930 Hz)
+
+    this.sirenLfo.connect(lfoGain)
+    lfoGain.connect(this.sirenOsc.frequency)
+
+    // Connect audio graph
+    this.sirenOsc.connect(this.sirenFilter)
+    this.sirenFilter.connect(this.sirenGain)
+    this.sirenGain.connect(this.sfxGain)
+
+    this.sirenOsc.start()
+    this.sirenLfo.start()
+    this.isSirenRunning = true
+  }
+
+  /**
+   * Sets police siren proximity volume based on distance to player (Phase 31.6)
+   */
+  public setPoliceSirenIntensity(distanceToPlayer: number): void {
+    if (!this.ctx || !this.isUnlocked || this.isMuted) return
+
+    if (distanceToPlayer < 120 && !this.isSirenRunning) {
+      this.startPoliceSiren()
+    }
+
+    if (this.sirenGain && this.ctx) {
+      const now = this.ctx.currentTime
+      if (distanceToPlayer >= 120 || this.isMuted) {
+        this.sirenGain.gain.setTargetAtTime(0.0, now, 0.2)
+      } else {
+        // Smooth logarithmic attenuation
+        const norm = Math.max(0, 1.0 - (distanceToPlayer / 120.0))
+        const targetVol = norm * norm * 0.35
+        this.sirenGain.gain.setTargetAtTime(targetVol, now, 0.1)
+      }
+    }
+  }
+
+  /**
+   * Stops procedural police siren immediately (Phase 31.6)
+   */
+  public stopPoliceSiren(): void {
+    if (!this.isSirenRunning) return
+    if (this.sirenGain && this.ctx) {
+      this.sirenGain.gain.setValueAtTime(0, this.ctx.currentTime)
+    }
+    if (this.sirenOsc) {
+      try { this.sirenOsc.stop() } catch {}
+      this.sirenOsc.disconnect()
+      this.sirenOsc = null
+    }
+    if (this.sirenLfo) {
+      try { this.sirenLfo.stop() } catch {}
+      this.sirenLfo.disconnect()
+      this.sirenLfo = null
+    }
+    if (this.sirenFilter) {
+      this.sirenFilter.disconnect()
+      this.sirenFilter = null
+    }
+    this.isSirenRunning = false
+  }
+
 
 
   /**
@@ -794,6 +892,7 @@ export class AudioManager {
   }
 
   public dispose(): void {
+    this.stopPoliceSiren()
     if (this.rainNoiseSource) {
       try { this.rainNoiseSource.stop() } catch {}
       this.rainNoiseSource = null

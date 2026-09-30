@@ -23,8 +23,10 @@ export class DayNightCycle {
   private currentSkyColor = new THREE.Color(0x93c5fd)
   private currentFogColor = new THREE.Color(0x93c5fd)
 
-  // Listeners
+  // Listeners (Throttled for Performance)
   public onTimeChanged?: (timeText: string, isNight: boolean, preset: TimePreset) => void
+  private lastNotifiedTimeString: string = ''
+  private lastNotifiedPreset?: TimePreset
 
   constructor(
     scene: THREE.Scene,
@@ -270,9 +272,12 @@ export class DayNightCycle {
       this.starsMaterial.opacity = THREE.MathUtils.lerp(this.starsMaterial.opacity, starOpacity, lerpRate)
     }
 
-    // Callback notification
-    if (this.onTimeChanged) {
-      this.onTimeChanged(this.getTimeString(), this.isNight(), this.activePreset)
+    // Callback notification (Throttled: only when time string or preset changes)
+    const timeStr = this.getTimeString()
+    if (this.onTimeChanged && (timeStr !== this.lastNotifiedTimeString || this.activePreset !== this.lastNotifiedPreset)) {
+      this.lastNotifiedTimeString = timeStr
+      this.lastNotifiedPreset = this.activePreset
+      this.onTimeChanged(timeStr, this.isNight(), this.activePreset)
     }
   }
 

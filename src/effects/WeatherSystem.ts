@@ -101,9 +101,9 @@ export class WeatherSystem {
   // Registered asphalt materials for dynamic wetness & reflections
   private asphaltMaterials: Set<THREE.MeshStandardMaterial> = new Set()
 
-  // Rain Line Segments Particle System
+  // Rain Line Segments Particle System (Optimized for 60+ FPS)
   private rainGroup: THREE.Group
-  private rainCount = 2800
+  private rainCount = 950
   private rainGeometry: THREE.BufferGeometry
   private rainMaterial: THREE.LineBasicMaterial
   private rainLines: THREE.LineSegments
@@ -154,7 +154,7 @@ export class WeatherSystem {
       const x = (Math.random() - 0.5) * spanX
       const y = Math.random() * spanY
       const z = (Math.random() - 0.5) * spanZ
-      const dropLen = 0.55 + Math.random() * 0.25
+      const dropLen = 0.72 + Math.random() * 0.35
 
       // Start vertex (bottom of raindrop)
       this.rainPositions[idx] = x
@@ -311,10 +311,13 @@ export class WeatherSystem {
   ): void {
     const preset = WEATHER_PRESETS[this.currentType]
 
-    // 1. Dynamic Wetness Lerping
+    // 1. Dynamic Wetness Lerping (Throttled for High Performance)
+    const prevWetness = this.currentWetness
     const wetnessLerpRate = Math.min(delta * 0.45, 0.2)
     this.currentWetness = THREE.MathUtils.lerp(this.currentWetness, this.targetWetness, wetnessLerpRate)
-    this.applyWetnessToMaterials(false)
+    if (Math.abs(this.currentWetness - prevWetness) > 0.0005 || Math.abs(this.currentWetness - this.targetWetness) > 0.001) {
+      this.applyWetnessToMaterials(false)
+    }
 
     // 2. Rain Opacity & Visibility Update
     const targetRainOpacity =
@@ -475,8 +478,12 @@ export class WeatherSystem {
         mat.roughness = targetR
         mat.metalness = targetM
       } else {
-        mat.roughness = THREE.MathUtils.lerp(mat.roughness, targetR, 0.1)
-        mat.metalness = THREE.MathUtils.lerp(mat.metalness, targetM, 0.1)
+        if (Math.abs(mat.roughness - targetR) > 0.002) {
+          mat.roughness = THREE.MathUtils.lerp(mat.roughness, targetR, 0.15)
+        }
+        if (Math.abs(mat.metalness - targetM) > 0.002) {
+          mat.metalness = THREE.MathUtils.lerp(mat.metalness, targetM, 0.15)
+        }
       }
     }
   }

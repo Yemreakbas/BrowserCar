@@ -64,11 +64,14 @@ export class AIVehicle {
   public lapTimes: number[] = []
   public isFinished: boolean = false
 
-  // Cached math vectors
+  // Cached math vectors (Zero-allocation for 60+ FPS)
   private tempForward = new THREE.Vector3()
   private tempRight = new THREE.Vector3()
   private tempTargetDir = new THREE.Vector3()
   private tempDiff = new THREE.Vector3()
+  private tempLookahead = new THREE.Vector3()
+  private tempObsDiff = new THREE.Vector3()
+  private tempObsDir = new THREE.Vector3()
 
   constructor(scene: THREE.Scene, config: AIOptimizationConfig) {
     this.scene = scene
@@ -291,11 +294,11 @@ export class AIVehicle {
       }
     }
 
-    // Lookahead point for smoother racing line
+    // Lookahead point for smoother racing line (Zero allocation)
     const lookaheadIdx = (this.currentWaypointIndex + 1) % this.waypoints.length
     const nextWp = this.waypoints[lookaheadIdx]
-    const lookaheadTarget = new THREE.Vector3().lerpVectors(targetWp, nextWp, 0.45)
-    this.tempTargetDir.subVectors(lookaheadTarget, this.root.position).normalize()
+    this.tempLookahead.lerpVectors(targetWp, nextWp, 0.45)
+    this.tempTargetDir.subVectors(this.tempLookahead, this.root.position).normalize()
 
     // 2. Heading alignment & Steer calculation
     this.tempForward.set(0, 0, 1).applyQuaternion(this.root.quaternion)
@@ -308,7 +311,7 @@ export class AIVehicle {
     const angleDiff = Math.atan2(rightDot, forwardDot)
     let steerDemand = THREE.MathUtils.clamp(angleDiff * 1.6, -0.65, 0.65)
 
-    // 3. Obstacle Avoidance & Collision Prevention
+    // 3. Obstacle Avoidance & Collision Prevention (Zero allocation)
     let targetSpeed = this.maxSpeed
     let avoidanceBrake = false
 
@@ -319,15 +322,20 @@ export class AIVehicle {
     }
 
     // Check obstacles ahead (Player and other AIs)
-    for (const obs of obstacles) {
-      const toObs = new THREE.Vector3().subVectors(obs.position, this.root.position)
-      const dist = toObs.length()
+    for (let oIdx = 0; oIdx < obstacles.length; oIdx++) {
+      const obs = obstacles[oIdx]
+      // Skip self
+      if (obs.position === this.root.position) continue
 
-      if (dist < 14.0) {
-        const obsForwardDot = this.tempForward.dot(toObs.clone().normalize())
+      this.tempObsDiff.subVectors(obs.position, this.root.position)
+      const dist = this.tempObsDiff.length()
+
+      if (dist < 14.0 && dist > 0.05) {
+        this.tempObsDir.copy(this.tempObsDiff).multiplyScalar(1.0 / dist)
+        const obsForwardDot = this.tempForward.dot(this.tempObsDir)
         if (obsForwardDot > 0.4) {
           // Obstacle is ahead in front cone!
-          const obsRightDot = this.tempRight.dot(toObs.clone().normalize())
+          const obsRightDot = this.tempRight.dot(this.tempObsDir)
 
           if (dist < 6.0) {
             // Immediate braking zone to prevent rear-ending
