@@ -30,7 +30,7 @@ export class AIManager {
     {
       id: 'ai_vortex',
       name: 'Vortex AI',
-      modelPath: '/assets/cars/race.glb',
+      modelPath: './assets/cars/race.glb',
       color: 0xef4444, // Racing Red
       maxSpeed: 38.5,
       acceleration: 28.0,
@@ -40,7 +40,7 @@ export class AIManager {
     {
       id: 'ai_cyberion',
       name: 'Cyberion AI',
-      modelPath: '/assets/cars/race-future.glb',
+      modelPath: './assets/cars/race-future.glb',
       color: 0x8b5cf6, // Electric Violet
       maxSpeed: 37.0,
       acceleration: 26.5,
@@ -50,7 +50,7 @@ export class AIManager {
     {
       id: 'ai_driftpulse',
       name: 'Drift Pulse AI',
-      modelPath: '/assets/cars/hatchback-sports.glb',
+      modelPath: './assets/cars/hatchback-sports.glb',
       color: 0x10b981, // Emerald Green
       maxSpeed: 35.5,
       acceleration: 25.0,
@@ -60,7 +60,7 @@ export class AIManager {
     {
       id: 'ai_interceptor',
       name: 'Interceptor AI',
-      modelPath: '/assets/cars/police.glb',
+      modelPath: './assets/cars/police.glb',
       color: 0x3b82f6, // Royal Blue
       maxSpeed: 36.0,
       acceleration: 26.0,
@@ -74,7 +74,7 @@ export class AIManager {
     {
       id: 'traffic_taxi',
       name: 'Sarı Taksi',
-      modelPath: '/assets/cars/taxi.glb',
+      modelPath: './assets/cars/taxi.glb',
       color: 0xf59e0b,
       maxSpeed: 16.0,
       acceleration: 15.0,
@@ -82,7 +82,7 @@ export class AIManager {
     {
       id: 'traffic_sedan',
       name: 'Şehir Sedanı',
-      modelPath: '/assets/cars/sedan.glb',
+      modelPath: './assets/cars/sedan.glb',
       color: 0x3b82f6,
       maxSpeed: 15.0,
       acceleration: 14.0,
@@ -90,7 +90,7 @@ export class AIManager {
     {
       id: 'traffic_suv',
       name: 'Lüks SUV',
-      modelPath: '/assets/cars/suv-luxury.glb',
+      modelPath: './assets/cars/suv-luxury.glb',
       color: 0x1e293b,
       maxSpeed: 14.5,
       acceleration: 13.0,
@@ -98,7 +98,7 @@ export class AIManager {
     {
       id: 'traffic_van',
       name: 'Kargo Van',
-      modelPath: '/assets/cars/van.glb',
+      modelPath: './assets/cars/van.glb',
       color: 0x64748b,
       maxSpeed: 13.5,
       acceleration: 12.0,
@@ -106,7 +106,7 @@ export class AIManager {
     {
       id: 'traffic_hatch',
       name: 'Kompakt Hatch',
-      modelPath: '/assets/cars/hatchback-sports.glb',
+      modelPath: './assets/cars/hatchback-sports.glb',
       color: 0xec4899,
       maxSpeed: 16.5,
       acceleration: 16.0,
@@ -170,31 +170,47 @@ export class AIManager {
     this.clear()
     this.activeMode = 'CITY'
 
-    // Continuous boulevard & perimeter loop for city traffic (driving in right lanes)
-    // Road width is ~12-14m, lane center is ~3.2m offset from road axis
-    const routeOuterLoop = [
-      new THREE.Vector3(3.4, 0, -60),
-      new THREE.Vector3(3.4, 0, -4.0),
-      new THREE.Vector3(60, 0, -4.0),
-      new THREE.Vector3(60, 0, 4.0),
-      new THREE.Vector3(3.4, 0, 4.0),
-      new THREE.Vector3(3.4, 0, 60),
-      new THREE.Vector3(-3.4, 0, 60),
-      new THREE.Vector3(-3.4, 0, 4.0),
-      new THREE.Vector3(-60, 0, 4.0),
-      new THREE.Vector3(-60, 0, -4.0),
-      new THREE.Vector3(-3.4, 0, -4.0),
-      new THREE.Vector3(-3.4, 0, -60),
+    // Continuous boulevard & perimeter loops for expanded city traffic (driving in right lanes)
+    // Central Avenues (X=0, Z=0), Mid Avenues (X=+-64, Z=+-64), Outer Avenues (X=+-128, Z=+-128)
+    const routeCentralBoulevards = [
+      new THREE.Vector3(3.6, 0, -115),
+      new THREE.Vector3(3.6, 0, -4.0),
+      new THREE.Vector3(115, 0, -3.6),
+      new THREE.Vector3(115, 0, 3.6),
+      new THREE.Vector3(4.0, 0, 3.6),
+      new THREE.Vector3(3.6, 0, 115),
+      new THREE.Vector3(-3.6, 0, 115),
+      new THREE.Vector3(-3.6, 0, 4.0),
+      new THREE.Vector3(-115, 0, 3.6),
+      new THREE.Vector3(-115, 0, -3.6),
+      new THREE.Vector3(-4.0, 0, -3.6),
+      new THREE.Vector3(-3.6, 0, -115),
     ]
 
-    const routePerimeter = [
-      new THREE.Vector3(56, 0, -56),
-      new THREE.Vector3(56, 0, 56),
-      new THREE.Vector3(-56, 0, 56),
-      new THREE.Vector3(-56, 0, -56),
+    const routeMidAvenueRing = [
+      new THREE.Vector3(67.6, 0, -60.4),
+      new THREE.Vector3(67.6, 0, 60.4),
+      new THREE.Vector3(60.4, 0, 67.6),
+      new THREE.Vector3(-60.4, 0, 67.6),
+      new THREE.Vector3(-67.6, 0, 60.4),
+      new THREE.Vector3(-67.6, 0, -60.4),
+      new THREE.Vector3(-60.4, 0, -67.6),
+      new THREE.Vector3(60.4, 0, -67.6),
     ]
 
-    const routes = [routeOuterLoop, routePerimeter]
+    const routeDowntownInterchange = [
+      new THREE.Vector3(3.6, 0, -64),
+      new THREE.Vector3(3.6, 0, 0),
+      new THREE.Vector3(64, 0, -3.6),
+      new THREE.Vector3(64, 0, 3.6),
+      new THREE.Vector3(3.6, 0, 64),
+      new THREE.Vector3(-3.6, 0, 64),
+      new THREE.Vector3(-64, 0, 3.6),
+      new THREE.Vector3(-64, 0, -3.6),
+      new THREE.Vector3(-3.6, 0, -64),
+    ]
+
+    const routes = [routeCentralBoulevards, routeMidAvenueRing, routeDowntownInterchange]
 
     for (let i = 0; i < AIManager.TRAFFIC_PROFILES.length; i++) {
       const profile = AIManager.TRAFFIC_PROFILES[i]

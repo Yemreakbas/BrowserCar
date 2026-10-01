@@ -83,7 +83,7 @@ export class RemoteVehicle {
     this.createPlaceholder()
     this.createNameplate()
     this.flameVFX = new ExhaustFlameVFX(this.root, false)
-    this.loadKenneyModel('/assets/cars/sedan-sports.glb')
+    this.loadKenneyModel('./assets/cars/sedan-sports.glb')
 
     this.scene.add(this.root)
   }
@@ -173,7 +173,7 @@ export class RemoteVehicle {
       const loadingManager = new THREE.LoadingManager()
       loadingManager.setURLModifier(url => {
         if (url.includes('colormap.png')) {
-          return '/assets/cars/Textures/colormap.png'
+          return './assets/cars/Textures/colormap.png'
         }
         return url
       })

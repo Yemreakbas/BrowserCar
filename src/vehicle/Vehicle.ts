@@ -10,6 +10,7 @@ import {
 import { NitroSystem } from './NitroSystem.ts'
 import { VehicleHeadlights } from '../effects/VehicleHeadlights.ts'
 import { VehicleDamageSystem } from '../effects/VehicleDamageSystem.ts'
+import { VehicleUnderglow } from '../effects/VehicleUnderglow.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 
 
@@ -73,8 +74,19 @@ export class Vehicle {
   // Weather grip scaling (Phase 31.4)
   public weatherGripMultiplier: number = 1.0
 
+  // Rev Limiter & Two-Pedal Burnout State (W + S "Aragaz / Kesici")
+  public isRevLimiterActive: boolean = false
+  private revLimiterTime: number = 0
+
   // Damage, Collision Deformation & Sparks System (Phase 31.5)
   public damageSystem: VehicleDamageSystem
+
+  // Neon Underglow System
+  public underglow: VehicleUnderglow
+
+  // Engine & Turbo Callbacks
+  public onThrottleLiftOff?: (intensity: number) => void
+  private prevForwardKey: boolean = false
 
   constructor(
     scene: THREE.Scene,
@@ -105,6 +117,9 @@ export class Vehicle {
 
     // Damage & Collision Sparks System (Phase 31.5)
     this.damageSystem = new VehicleDamageSystem(scene)
+
+    // Neon Underglow System attached to body group
+    this.underglow = new VehicleUnderglow(this.bodyGroup)
 
 
     // Temporary placeholder until Kenney model finishes loading
@@ -163,7 +178,7 @@ export class Vehicle {
     const loadingManager = new THREE.LoadingManager()
     loadingManager.setURLModifier((url) => {
       if (url.includes('colormap.png')) {
-        return '/assets/cars/Textures/colormap.png'
+        return './assets/cars/Textures/colormap.png'
       }
       return url
     })
@@ -410,46 +425,73 @@ export class Vehicle {
       ? this.config.maxForwardSpeed * nitroResult.topSpeedMultiplier
       : this.config.maxForwardSpeed
 
-    // 5. Powertrain Dynamics (Throttle, Reverse, Foot Brake & Handbrake)
+    // 5. Powertrain Dynamics (Throttle, Reverse, Foot Brake, Handbrake & W+S Rev Limiter)
     let impulse = 0
 
-    if (keys.forward) {
-      if (forwardSpeed < -0.2) {
-        // Foot brake while moving backwards
-        impulse += this.config.brakingPower * delta
-      } else if (forwardSpeed < effectiveMaxSpeed) {
-        if (this.isDrifting || keys.handbrake) {
-          // Power-slide throttle: delivers continuous drive thrust to power through corners
-          impulse += this.config.baseAcceleration * 0.92 * delta
-        } else {
-          // Progressive acceleration curve: strong low-end torque tapering smoothly near top speed
-          const speedRatio = Math.min(Math.max(forwardSpeed / this.config.maxForwardSpeed, 0), 1)
-          const torqueFactor =
-            Math.pow(1 - speedRatio, this.config.accelerationCurvePower) * 0.75 + 0.25
-          impulse += this.config.baseAcceleration * torqueFactor * delta
-        }
-      }
+    if (keys.forward && keys.backward) {
+      // Two-pedal input: Aragaz / Kesici / Burnout Launch Mode
+      if (absForward < 3.5) {
+        this.isRevLimiterActive = true
+        this.revLimiterTime += delta
+        impulse = 0
+        newLinvelX *= Math.max(0, 1 - delta * 14.0)
+        newLinvelZ *= Math.max(0, 1 - delta * 14.0)
 
-      // Apply Nitro Boost Thrust
-      if (this.isNitroActive) {
-        impulse += nitroResult.impulse
-      }
-    } else if (keys.backward) {
-      if (forwardSpeed > 0.3) {
-        // Foot brake while moving forward
-        impulse -= this.config.brakingPower * delta
-      } else if (forwardSpeed > this.config.maxReverseSpeed) {
-        // Fast, responsive reversing with strong initial torque punch
-        const revRatio = Math.min(Math.abs(forwardSpeed) / Math.abs(this.config.maxReverseSpeed), 1.0)
-        const revTorque = Math.pow(1.0 - revRatio, 0.7) * 0.7 + 0.3
-        impulse -= this.config.reverseAcceleration * revTorque * delta
+        // Staccato exhaust flame burst on rev limiter bounce peaks
+        const bouncePhase = Math.sin(this.revLimiterTime * 95)
+        if (bouncePhase > 0.5) {
+          this.nitroSystem.flameVFX.setActive(true)
+          this.nitroSystem.flameVFX.update(delta, 0.85)
+        } else {
+          this.nitroSystem.flameVFX.setActive(false)
+          this.nitroSystem.flameVFX.update(delta, 0.0)
+        }
+      } else {
+        // Heavy foot braking when moving fast with both pedals pressed
+        this.isRevLimiterActive = false
+        impulse -= this.config.brakingPower * 1.25 * delta * Math.sign(forwardSpeed)
       }
     } else {
-      // Natural rolling drag & aerodynamic coasting friction
-      const dragAmount =
-        Math.min(delta * this.config.coastingDrag, absForward) *
-        Math.sign(forwardSpeed)
-      impulse -= dragAmount
+      this.isRevLimiterActive = false
+
+      if (keys.forward) {
+        if (forwardSpeed < -0.2) {
+          // Foot brake while moving backwards
+          impulse += this.config.brakingPower * delta
+        } else if (forwardSpeed < effectiveMaxSpeed) {
+          if (this.isDrifting || keys.handbrake) {
+            // Power-slide throttle: delivers continuous drive thrust to power through corners
+            impulse += this.config.baseAcceleration * 0.92 * delta
+          } else {
+            // Progressive acceleration curve: strong low-end torque tapering smoothly near top speed
+            const speedRatio = Math.min(Math.max(forwardSpeed / this.config.maxForwardSpeed, 0), 1)
+            const torqueFactor =
+              Math.pow(1 - speedRatio, this.config.accelerationCurvePower) * 0.75 + 0.25
+            impulse += this.config.baseAcceleration * torqueFactor * delta
+          }
+        }
+
+        // Apply Nitro Boost Thrust
+        if (this.isNitroActive) {
+          impulse += nitroResult.impulse
+        }
+      } else if (keys.backward) {
+        if (forwardSpeed > 0.3) {
+          // Foot brake while moving forward
+          impulse -= this.config.brakingPower * delta
+        } else if (forwardSpeed > this.config.maxReverseSpeed) {
+          // Fast, responsive reversing with strong initial torque punch
+          const revRatio = Math.min(Math.abs(forwardSpeed) / Math.abs(this.config.maxReverseSpeed), 1.0)
+          const revTorque = Math.pow(1.0 - revRatio, 0.7) * 0.7 + 0.3
+          impulse -= this.config.reverseAcceleration * revTorque * delta
+        }
+      } else {
+        // Natural rolling drag & aerodynamic coasting friction
+        const dragAmount =
+          Math.min(delta * this.config.coastingDrag, absForward) *
+          Math.sign(forwardSpeed)
+        impulse -= dragAmount
+      }
     }
 
     // Handbrake deceleration: gently decelerates without killing slide momentum
@@ -474,9 +516,17 @@ export class Vehicle {
     // Apply updated linear velocity (preserving natural Rapier gravity on Y)
     this.rigidBody.setLinvel({ x: newLinvelX, y: linvel.y, z: newLinvelZ }, true)
 
-    // 5.5 Headlights & Brake Lights Update (Phase 31.3)
+    // 5.5 Headlights, Brake Lights & Neon Underglow Update
     const isBraking = !!(keys.handbrake || (keys.backward && forwardSpeed > 0.4))
     this.headlights.update(delta, isBraking, isNight)
+    this.underglow.update(delta, this.isNitroActive, this.isRevLimiterActive)
+
+    // 5.6 Turbo Flutter / Blow-Off Valve detection on throttle release
+    if (this.prevForwardKey && !keys.forward && forwardSpeed > 10.0) {
+      const boostIntensity = Math.min(1.0, forwardSpeed / 24.0)
+      this.onThrottleLiftOff?.(boostIntensity)
+    }
+    this.prevForwardKey = !!keys.forward
 
     // 6. Speed-Sensitive Steering
     // At low speeds, full steering angle is available for sharp 90-degree city turns.
@@ -505,7 +555,11 @@ export class Vehicle {
     )
 
     // Apply Yaw Angular Velocity
-    if (absForward > 0.04) {
+    if (this.isRevLimiterActive && (keys.left || keys.right)) {
+      // Burnout Donut: spin yaw velocity in place around front axle!
+      const donutDir = (keys.left ? 1 : 0) - (keys.right ? 1 : 0)
+      this.rigidBody.setAngvel({ x: 0, y: donutDir * 3.4, z: 0 }, true)
+    } else if (absForward > 0.04) {
       const speedThreshold = 0.75 // Full steering authority reached at ~2.7 km/h for effortless turning
       const speedFactor = Math.min(absForward / speedThreshold, 1.0)
       const directionSign = forwardSpeed >= 0 ? 1 : -1
@@ -531,8 +585,12 @@ export class Vehicle {
     }
 
     // 7. Wheel Steering & Rolling Animations
-    const distanceTravelled = forwardSpeed * delta
-    this.wheelSpinAngle += distanceTravelled / this.config.wheelRadius
+    if (this.isRevLimiterActive) {
+      this.wheelSpinAngle += 55.0 * delta
+    } else {
+      const distanceTravelled = forwardSpeed * delta
+      this.wheelSpinAngle += distanceTravelled / this.config.wheelRadius
+    }
 
     if (this.wheelFrontLeft) {
       this.wheelFrontLeft.rotation.y = this.currentSteerAngle

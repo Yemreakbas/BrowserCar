@@ -43,7 +43,7 @@ export class RaceTrack {
 
   // Track Curve & Geometry Data
   private trackCurve!: THREE.CatmullRomCurve3
-  private readonly TRACK_WIDTH = 16.5 // Wide and spacious for overtaking & clean racing
+  private readonly TRACK_WIDTH = 18.0 // Wide, flowing, and completely open
   private readonly KERB_WIDTH = 1.6
   private readonly NUM_SEGMENTS = 180
 
@@ -64,7 +64,7 @@ export class RaceTrack {
     lapMessage: 'Grand Prix Pisti Hazır! 1. Tura Başla',
   }
 
-  // Starting Grid & Pit Spawns on Main Straight (Heading +Z towards Gantry at Z = 590)
+  // Starting Grid & Pit Spawns on Main Straight (Heading +Z towards Gantry at Z = 600)
   public readonly spawnPoints: TrackSpawnPoint[] = [
     {
       id: 'pole-position',
@@ -155,28 +155,28 @@ export class RaceTrack {
 
   // --- 1. CIRCUIT SPLINE ---
   private buildCircuitSpline() {
-    // A grand, flowing ~750m international racing circuit situated around Z = 600:
-    // Long Main Straight -> High-Speed Sweeper (T1-T2) -> Back Straight -> Wide Parabolic Hairpin (T3)
-    // -> Flowing S-Chicane (T4-T5) -> Infield Straight -> Parabolica (T6-T7) -> Main Straight
+    // Brand new, pristine Grand Prix Circuit with ZERO self-intersections (~900m):
+    // Main Straight (X = 0, Z = 490..650) -> High-Speed Sweeper T1-T2 (Z = 650..730, X -> 175)
+    // -> Wide East Back Straight (X = 175, Z = 640..480) -> South Hairpin (Z = 405..440)
+    // -> Parabolica (smooth curve sweeping back into X = 0 from the South)
     const zOffset = this.offset.z // 600
     const controlPoints = [
-      new THREE.Vector3(0, 0, -85 + zOffset),   // P0: Start-Finish Straight South (Z = 515)
-      new THREE.Vector3(0, 0, -10 + zOffset),   // P1: Start-Finish Gantry (Z = 590)
-      new THREE.Vector3(0, 0, 55 + zOffset),    // P2: End of Main Straight, Turn 1 Braking (Z = 655)
-      new THREE.Vector3(28, 0, 98 + zOffset),   // P3: Turn 1 Entry (Wide Right Sweeper)
-      new THREE.Vector3(68, 0, 112 + zOffset),  // P4: Turn 1 Apex
-      new THREE.Vector3(108, 0, 85 + zOffset),  // P5: Turn 2 Exit onto Back Straight
-      new THREE.Vector3(118, 0, 25 + zOffset),  // P6: Back Straight High-Speed Section
-      new THREE.Vector3(118, 0, -45 + zOffset), // P7: Back Straight Braking Zone (150m board)
-      new THREE.Vector3(98, 0, -105 + zOffset), // P8: Hairpin Entry (Turn 3)
-      new THREE.Vector3(55, 0, -125 + zOffset), // P9: Hairpin Apex (Wide & Smooth)
-      new THREE.Vector3(12, 0, -105 + zOffset), // P10: Hairpin Exit
-      new THREE.Vector3(-28, 0, -85 + zOffset), // P11: S-Curve 1 (Left Flick)
-      new THREE.Vector3(-58, 0, -48 + zOffset), // P12: S-Curve 2 (Right Transition)
-      new THREE.Vector3(-68, 0, 0 + zOffset),   // P13: Infield Straight
-      new THREE.Vector3(-58, 0, 52 + zOffset),  // P14: Parabolica Entry
-      new THREE.Vector3(-32, 0, 72 + zOffset),  // P15: Parabolica Mid-Apex
-      new THREE.Vector3(-10, 0, 20 + zOffset),  // P16: Parabolica Exit onto Straight
+      new THREE.Vector3(0, 0, -110 + zOffset),  // P0: Start of Main Straight South (Z = 490)
+      new THREE.Vector3(0, 0, -25 + zOffset),   // P1: Grid Section (Z = 575)
+      new THREE.Vector3(0, 0, 0 + zOffset),     // P2: Start/Finish Line & Gantry (Z = 600)
+      new THREE.Vector3(0, 0, 50 + zOffset),    // P3: Main Straight High-Speed (Z = 650)
+      new THREE.Vector3(25, 0, 95 + zOffset),   // P4: Turn 1 Entry (Right Sweeper, Z = 695)
+      new THREE.Vector3(75, 0, 125 + zOffset),  // P5: Turn 1 Apex (Z = 725)
+      new THREE.Vector3(130, 0, 120 + zOffset), // P6: Turn 2 Sweeper (Z = 720)
+      new THREE.Vector3(165, 0, 80 + zOffset),  // P7: Turn 2 Exit into Back Straight (Z = 680)
+      new THREE.Vector3(175, 0, 25 + zOffset),  // P8: Back Straight High-Speed Section (Z = 625)
+      new THREE.Vector3(175, 0, -45 + zOffset), // P9: Back Straight Midpoint (Z = 555)
+      new THREE.Vector3(175, 0, -115 + zOffset),// P10: Back Straight Braking Zone (Z = 485)
+      new THREE.Vector3(155, 0, -165 + zOffset),// P11: South Hairpin Entry (Turn 3, Z = 435)
+      new THREE.Vector3(110, 0, -195 + zOffset),// P12: South Hairpin Apex (Z = 405)
+      new THREE.Vector3(55, 0, -190 + zOffset), // P13: South Hairpin Mid-Exit (Z = 410)
+      new THREE.Vector3(15, 0, -160 + zOffset), // P14: Infield Straight (Z = 440)
+      new THREE.Vector3(-6, 0, -135 + zOffset), // P15: Parabolica Sweeper into Main Straight (Z = 465)
     ]
 
     this.trackCurve = new THREE.CatmullRomCurve3(controlPoints, true, 'centripetal', 0.5)
@@ -218,10 +218,10 @@ export class RaceTrack {
   // --- 2. PROCEDURAL TRACK SURFACE ---
   private createRoadSurface() {
     // Infield & Outfield Grass Bed centered at Z = 600
-    const grassGeo = new THREE.PlaneGeometry(420, 420)
+    const grassGeo = new THREE.PlaneGeometry(550, 550)
     const grass = new THREE.Mesh(grassGeo, this.materials.grass)
     grass.rotation.x = -Math.PI / 2
-    grass.position.set(25, -0.01, this.offset.z)
+    grass.position.set(85, -0.01, this.offset.z)
     grass.receiveShadow = true
     grass.matrixAutoUpdate = false
     grass.updateMatrix()
@@ -346,7 +346,7 @@ export class RaceTrack {
   // --- 4. START/FINISH OVERHEAD GANTRY & CHECKERED LINE ---
   private createStartFinishGantry() {
     const gantry = new THREE.Group()
-    const gantryZ = -10 + this.offset.z // Z = 590
+    const gantryZ = 0 + this.offset.z // Z = 600
     gantry.position.set(0, 0, gantryZ)
 
     // Checkered Start / Finish Strip on Asphalt across the road
@@ -366,22 +366,22 @@ export class RaceTrack {
       }
     }
 
-    // Overhead Truss Structure (Spans 20.5m across full track + margins)
-    const pillarGeo = new THREE.BoxGeometry(0.5, 7.0, 0.5)
+    // Overhead Truss Structure (Spans 24m across full 18m track + margins)
+    const pillarGeo = new THREE.BoxGeometry(0.5, 7.5, 0.5)
     const leftPillar = new THREE.Mesh(pillarGeo, this.materials.overheadGantry)
-    leftPillar.position.set(-this.TRACK_WIDTH / 2 - 2.0, 3.5, 0)
+    leftPillar.position.set(-this.TRACK_WIDTH / 2 - 2.5, 3.75, 0)
     const rightPillar = new THREE.Mesh(pillarGeo, this.materials.overheadGantry)
-    rightPillar.position.set(this.TRACK_WIDTH / 2 + 2.0, 3.5, 0)
+    rightPillar.position.set(this.TRACK_WIDTH / 2 + 2.5, 3.75, 0)
 
-    const beamGeo = new THREE.BoxGeometry(this.TRACK_WIDTH + 5.0, 0.9, 0.9)
+    const beamGeo = new THREE.BoxGeometry(this.TRACK_WIDTH + 6.0, 0.9, 0.9)
     const beam = new THREE.Mesh(beamGeo, this.materials.overheadGantry)
-    beam.position.set(0, 6.7, 0)
+    beam.position.set(0, 7.2, 0)
 
     // Signboard
     const signGeo = new THREE.BoxGeometry(this.TRACK_WIDTH - 2.0, 1.4, 0.15)
     const signMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3 })
     const sign = new THREE.Mesh(signGeo, signMat)
-    sign.position.set(0, 6.2, 0.45)
+    sign.position.set(0, 6.7, 0.45)
 
     // Starting Lights (Red pods)
     for (let x = -3.6; x <= 3.6; x += 1.8) {
@@ -391,7 +391,7 @@ export class RaceTrack {
         emissiveIntensity: 2.2,
       })
       const pod = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), podMat)
-      pod.position.set(x, 5.1, 0.4)
+      pod.position.set(x, 5.6, 0.4)
       gantry.add(pod)
     }
 
@@ -400,21 +400,21 @@ export class RaceTrack {
     gantry.updateMatrix()
     this.group.add(gantry)
 
-    // Physical colliders for gantry pillars (safe outside road margins)
+    // Physical colliders for gantry pillars (safely outside road margins at +-11.5m)
     this.physicsWorld.createStaticBoxCollider(
-      -this.TRACK_WIDTH / 2 - 2.0,
-      3.5,
+      -this.TRACK_WIDTH / 2 - 2.5,
+      3.75,
       gantryZ,
       0.4,
-      3.5,
+      3.75,
       0.4
     )
     this.physicsWorld.createStaticBoxCollider(
-      this.TRACK_WIDTH / 2 + 2.0,
-      3.5,
+      this.TRACK_WIDTH / 2 + 2.5,
+      3.75,
       gantryZ,
       0.4,
-      3.5,
+      3.75,
       0.4
     )
   }
@@ -455,7 +455,7 @@ export class RaceTrack {
   // --- 6. CONTINUOUS TRACK BARRIERS WITH ROTATED COLLIDERS ---
   private createTrackBarriers() {
     const points = this.trackCurve.getSpacedPoints(this.NUM_SEGMENTS)
-    const barrierDist = this.TRACK_WIDTH / 2 + this.KERB_WIDTH + 0.5
+    const barrierDist = this.TRACK_WIDTH / 2 + this.KERB_WIDTH + 1.2
     const up = new THREE.Vector3(0, 1, 0)
 
     const barrierGroup = new THREE.Group()
@@ -510,8 +510,7 @@ export class RaceTrack {
     post.position.set(p1.x, 0.42, p1.z)
     parent.add(post)
 
-    // Accurate ROTATED Rapier Physics Static Box Collider
-    // Thin 0.35m rail exactly matches 3D mesh, preventing any invisible blocking walls on the track!
+    // Accurate ROTATED Rapier Physics Static Box Collider safely in grass
     this.physicsWorld.createStaticRotatedBoxCollider(
       mid.x,
       0.45,
@@ -533,14 +532,14 @@ export class RaceTrack {
     // 7.1 Spectator Grandstands along Main Straight
     const standGeo = new THREE.BoxGeometry(8.0, 5.0, 75.0)
     const stand = new THREE.Mesh(standGeo, this.materials.bleachers)
-    stand.position.set(this.TRACK_WIDTH / 2 + 7.5, 2.5, -20.0 + zOffset)
+    stand.position.set(-this.TRACK_WIDTH / 2 - 8.0, 2.5, -25.0 + zOffset)
     scenery.add(stand)
 
     const canopyGeo = new THREE.BoxGeometry(10.0, 0.35, 78.0)
     const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 })
     const canopy = new THREE.Mesh(canopyGeo, canopyMat)
-    canopy.position.set(this.TRACK_WIDTH / 2 + 6.5, 6.2, -20.0 + zOffset)
-    canopy.rotation.z = -0.15
+    canopy.position.set(-this.TRACK_WIDTH / 2 - 7.0, 6.2, -25.0 + zOffset)
+    canopy.rotation.z = 0.15
     scenery.add(canopy)
 
     // 7.2 Brake Distance Marker Boards (150m, 100m, 50m before Turn 1)
@@ -554,34 +553,41 @@ export class RaceTrack {
         new THREE.BoxGeometry(0.12, 1.4, 2.0),
         this.materials.brakeBoard
       )
-      board.position.set(-this.TRACK_WIDTH / 2 - 2.4, 1.0, m.z + zOffset)
+      board.position.set(-this.TRACK_WIDTH / 2 - 2.8, 1.0, m.z + zOffset)
       scenery.add(board)
     })
 
-    // 7.3 Trees positioned safely in the outfield (at least 25m away from track edges)
+    // 7.3 Trees positioned safely in the outfield (at least 35m away from track edges)
     const treeTrunkGeo = new THREE.CylinderGeometry(0.24, 0.38, 2.6, 6)
     const treeFoliageGeo = new THREE.ConeGeometry(1.8, 4.2, 6)
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x422a1d, roughness: 0.9 })
     const foliageMat = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.8, flatShading: true })
 
     const outfieldTreePositions = [
-      { x: -95, z: -110 },
-      { x: -110, z: -30 },
-      { x: -105, z: 60 },
-      { x: -75, z: 125 },
-      { x: -20, z: 135 },
-      { x: 50, z: 145 },
-      { x: 120, z: 135 },
-      { x: 155, z: 60 },
-      { x: 155, z: -20 },
-      { x: 145, z: -90 },
-      { x: 105, z: -145 },
-      { x: 35, z: -155 },
-      { x: -45, z: -145 },
-      // Safe center infield (well away from curves)
-      { x: 0, z: -20 },
-      { x: 35, z: 10 },
-      { x: 55, z: -30 },
+      // Outfield North
+      { x: -50, z: 140 },
+      { x: 25, z: 160 },
+      { x: 80, z: 170 },
+      { x: 140, z: 165 },
+      { x: 195, z: 140 },
+      // Outfield East
+      { x: 230, z: 80 },
+      { x: 235, z: 0 },
+      { x: 230, z: -80 },
+      { x: 210, z: -160 },
+      // Outfield South
+      { x: 140, z: -235 },
+      { x: 70, z: -245 },
+      { x: 0, z: -240 },
+      { x: -60, z: -190 },
+      // Outfield West
+      { x: -60, z: -100 },
+      { x: -65, z: -20 },
+      { x: -65, z: 60 },
+      // Safe Center Infield (at least 50m away from any road)
+      { x: 85, z: 0 },
+      { x: 95, z: -60 },
+      { x: 75, z: 50 },
     ]
 
     outfieldTreePositions.forEach((pos) => {
@@ -610,14 +616,14 @@ export class RaceTrack {
   // --- 8. CIRCUIT CHECKPOINTS SYSTEM ---
   private setupCheckpoints() {
     const tValues = [
-      { t: 0.045, name: 'Bitiş Çizgisi' },
-      { t: 0.16,  name: 'Viraj 1 Girişi' },
-      { t: 0.28,  name: 'Viraj 2 Çıkışı' },
-      { t: 0.40,  name: 'Arka Düzlük' },
-      { t: 0.54,  name: 'Viraj 3 (Hairpin)' },
-      { t: 0.67,  name: 'S-Virajları' },
-      { t: 0.79,  name: 'İç Düzlük' },
-      { t: 0.91,  name: 'Son Viraj (Parabolica)' },
+      { t: 0.08, name: 'Bitiş Çizgisi' },
+      { t: 0.20, name: 'Viraj 1 (Hızlı Sağa Sweeper)' },
+      { t: 0.32, name: 'Viraj 2 Çıkışı' },
+      { t: 0.45, name: 'Arka Düzlük' },
+      { t: 0.60, name: 'Viraj 3 (Güney Hairpin)' },
+      { t: 0.74, name: 'Hairpin Çıkışı' },
+      { t: 0.86, name: 'İç Yol' },
+      { t: 0.96, name: 'Son Viraj (Parabolica)' },
     ]
 
     this.checkpoints = tValues.map((item, index) => {

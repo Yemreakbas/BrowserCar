@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { PhysicsWorld } from '../physics/PhysicsWorld.ts'
+import { CITY_BLOCKS } from './CityCollisionHelper.ts'
 
 export interface SpawnLocation {
   id: string
@@ -19,11 +20,7 @@ export class CityWorld {
   private streetLightsGroup: THREE.Group | null = null
   private tarmacMat: THREE.MeshStandardMaterial | null = null
 
-  // Road grid dimensions
-  private readonly BLOCK_SIZE = 44.0
-  private readonly BLOCK_OFFSET = 32.0 // Center coordinate of quadrant blocks
-
-  // Available Spawn Points
+  // Expanded Metropolitan Spawn Points
   public readonly spawnLocations: SpawnLocation[] = [
     {
       id: 'start-line',
@@ -33,21 +30,33 @@ export class CityWorld {
     },
     {
       id: 'downtown-plaza',
-      name: 'Gökdelen Meydanı (Kuzeydoğu)',
-      position: new THREE.Vector3(45, 0, 45),
-      rotationY: -Math.PI / 2,
-    },
-    {
-      id: 'slalom-strip',
-      name: 'Slalom Parkuru (Doğu Caddesi)',
-      position: new THREE.Vector3(64, 0, -55),
+      name: 'Merkez Gökdelen Meydanı',
+      position: new THREE.Vector3(0, 0, 0),
       rotationY: 0,
     },
     {
+      id: 'north-uptown',
+      name: 'Kuzey Bulvarı (Uptown)',
+      position: new THREE.Vector3(0, 0, 95),
+      rotationY: Math.PI,
+    },
+    {
+      id: 'east-district',
+      name: 'Finans Bölgesi (Doğu Bulvarı)',
+      position: new THREE.Vector3(95, 0, 0),
+      rotationY: -Math.PI / 2,
+    },
+    {
       id: 'west-district',
-      name: 'Ticaret Bölgesi (Batı Caddesi)',
-      position: new THREE.Vector3(-45, 0, 0),
+      name: 'Ticaret Bölgesi (Batı Bulvarı)',
+      position: new THREE.Vector3(-95, 0, 0),
       rotationY: Math.PI / 2,
+    },
+    {
+      id: 'south-waterfront',
+      name: 'Güney Liman Caddesi',
+      position: new THREE.Vector3(0, 0, -115),
+      rotationY: 0,
     },
   ]
 
@@ -117,7 +126,7 @@ export class CityWorld {
     const loadingManager = new THREE.LoadingManager()
     loadingManager.setURLModifier((url) => {
       if (url.includes('colormap.png')) {
-        return '/assets/cars/Textures/colormap.png'
+        return './assets/cars/Textures/colormap.png'
       }
       return url
     })
@@ -155,7 +164,7 @@ export class CityWorld {
     this.group.add(ground)
 
     // Main Asphalt Grid
-    const tarmacSize = 190
+    const tarmacSize = 290
     const tarmacGeo = new THREE.PlaneGeometry(tarmacSize, tarmacSize)
     this.tarmacMat = new THREE.MeshStandardMaterial({
       color: 0x181a1f, // Rich dark asphalt
@@ -176,7 +185,7 @@ export class CityWorld {
   }
 
 
-  // --- 2. RAISED SIDEWALKS ---
+  // --- 2. RAISED SIDEWALKS FOR ALL 16 BLOCKS ---
   private createSidewalks() {
     const sidewalkMat = new THREE.MeshStandardMaterial({
       color: 0x9ca3af,
@@ -189,28 +198,22 @@ export class CityWorld {
       roughness: 0.8,
     })
 
-    const blockCenters = [
-      { x: -this.BLOCK_OFFSET, z: this.BLOCK_OFFSET },  // NW
-      { x: this.BLOCK_OFFSET, z: this.BLOCK_OFFSET },   // NE
-      { x: -this.BLOCK_OFFSET, z: -this.BLOCK_OFFSET }, // SW
-      { x: this.BLOCK_OFFSET, z: -this.BLOCK_OFFSET },  // SE
-    ]
-
     const sidewalkHeight = 0.18
-    const sidewalkSize = this.BLOCK_SIZE
 
-    blockCenters.forEach((center) => {
-      const slabGeo = new THREE.BoxGeometry(sidewalkSize, sidewalkHeight, sidewalkSize)
+    CITY_BLOCKS.forEach((block) => {
+      const widthX = block.maxX - block.minX
+      const widthZ = block.maxZ - block.minZ
+      const slabGeo = new THREE.BoxGeometry(widthX, sidewalkHeight, widthZ)
       const slab = new THREE.Mesh(slabGeo, sidewalkMat)
-      slab.position.set(center.x, sidewalkHeight / 2, center.z)
+      slab.position.set(block.centerX, sidewalkHeight / 2, block.centerZ)
       slab.receiveShadow = true
       slab.matrixAutoUpdate = false
       slab.updateMatrix()
       this.group.add(slab)
 
-      const curbBorderGeo = new THREE.BoxGeometry(sidewalkSize + 0.3, sidewalkHeight * 0.9, sidewalkSize + 0.3)
+      const curbBorderGeo = new THREE.BoxGeometry(widthX + 0.35, sidewalkHeight * 0.9, widthZ + 0.35)
       const curbBorder = new THREE.Mesh(curbBorderGeo, curbMat)
-      curbBorder.position.set(center.x, sidewalkHeight * 0.45, center.z)
+      curbBorder.position.set(block.centerX, sidewalkHeight * 0.45, block.centerZ)
       curbBorder.receiveShadow = true
       curbBorder.matrixAutoUpdate = false
       curbBorder.updateMatrix()
@@ -573,21 +576,21 @@ export class CityWorld {
   // --- 8. KENNEY ASSET LOADING & POPULATION ---
   private async loadAssetsAndPopulate(onReady?: () => void) {
     const assetUrls = [
-      '/assets/environment/city/building-a.glb',
-      '/assets/environment/city/building-b.glb',
-      '/assets/environment/city/building-c.glb',
-      '/assets/environment/city/building-d.glb',
-      '/assets/environment/city/building-e.glb',
-      '/assets/environment/city/building-f.glb',
-      '/assets/environment/city/building-g.glb',
-      '/assets/environment/city/building-h.glb',
-      '/assets/environment/city/building-skyscraper-a.glb',
-      '/assets/environment/city/building-skyscraper-b.glb',
-      '/assets/environment/city/building-skyscraper-c.glb',
-      '/assets/environment/city/detail-awning.glb',
-      '/assets/environment/city/detail-parasol-a.glb',
-      '/assets/cars/cone.glb',
-      '/assets/cars/box.glb',
+      './assets/environment/city/building-a.glb',
+      './assets/environment/city/building-b.glb',
+      './assets/environment/city/building-c.glb',
+      './assets/environment/city/building-d.glb',
+      './assets/environment/city/building-e.glb',
+      './assets/environment/city/building-f.glb',
+      './assets/environment/city/building-g.glb',
+      './assets/environment/city/building-h.glb',
+      './assets/environment/city/building-skyscraper-a.glb',
+      './assets/environment/city/building-skyscraper-b.glb',
+      './assets/environment/city/building-skyscraper-c.glb',
+      './assets/environment/city/detail-awning.glb',
+      './assets/environment/city/detail-parasol-a.glb',
+      './assets/cars/cone.glb',
+      './assets/cars/box.glb',
     ]
 
     console.log('Loading Kenney city assets...')
@@ -669,37 +672,90 @@ export class CityWorld {
   }
 
   private populateBuildings() {
-    // --- QUADRANT 1: NORTH-WEST (Retail & High-Rise Quarter) ---
-    this.placeBuilding('/assets/environment/city/building-skyscraper-a.glb', -22, 22, -Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-a.glb', -22, 38, -Math.PI / 2, 12.0)
-    this.placeDetail('/assets/environment/city/detail-awning.glb', -17.5, 38, -Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-b.glb', -38, 22, 0, 12.0)
-    this.placeBuilding('/assets/environment/city/building-e.glb', -38, 38, Math.PI / 2, 12.0)
-    this.placeDetail('/assets/environment/city/detail-parasol-a.glb', -16.5, 34, 0, 8.0)
-    this.placeDetail('/assets/environment/city/detail-parasol-a.glb', -16.5, 30, 0, 8.0)
+    // --- INNER 4 BLOCKS (Downtown Core) ---
+    // North-West
+    this.placeBuilding('./assets/environment/city/building-skyscraper-a.glb', -22, 22, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-a.glb', -22, 38, -Math.PI / 2, 12.0)
+    this.placeDetail('./assets/environment/city/detail-awning.glb', -17.5, 38, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-b.glb', -38, 22, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-e.glb', -38, 38, Math.PI / 2, 12.0)
 
-    // --- QUADRANT 2: NORTH-EAST (Financial District) ---
-    this.placeBuilding('/assets/environment/city/building-skyscraper-b.glb', 22, 22, 0, 12.5)
-    this.placeBuilding('/assets/environment/city/building-c.glb', 22, 38, Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-skyscraper-c.glb', 38, 22, Math.PI, 12.0)
-    this.placeBuilding('/assets/environment/city/building-d.glb', 38, 38, 0, 12.0)
+    // North-East
+    this.placeBuilding('./assets/environment/city/building-skyscraper-b.glb', 22, 22, 0, 12.5)
+    this.placeBuilding('./assets/environment/city/building-c.glb', 22, 38, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-c.glb', 38, 22, Math.PI, 12.0)
+    this.placeBuilding('./assets/environment/city/building-d.glb', 38, 38, 0, 12.0)
 
-    // --- QUADRANT 3: SOUTH-WEST (Commercial Plaza) ---
-    this.placeBuilding('/assets/environment/city/building-f.glb', -22, -22, Math.PI, 12.0)
-    this.placeBuilding('/assets/environment/city/building-g.glb', -22, -38, -Math.PI / 2, 12.0)
-    this.placeDetail('/assets/environment/city/detail-awning.glb', -17.5, -38, -Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-h.glb', -38, -22, Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-b.glb', -38, -38, Math.PI, 12.0)
+    // South-West
+    this.placeBuilding('./assets/environment/city/building-f.glb', -22, -22, Math.PI, 12.0)
+    this.placeBuilding('./assets/environment/city/building-g.glb', -22, -38, -Math.PI / 2, 12.0)
+    this.placeDetail('./assets/environment/city/detail-awning.glb', -17.5, -38, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-h.glb', -38, -22, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-b.glb', -38, -38, Math.PI, 12.0)
 
-    // --- QUADRANT 4: SOUTH-EAST (Mixed High-Rise & Downtown) ---
-    this.placeBuilding('/assets/environment/city/building-skyscraper-a.glb', 22, -22, Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-e.glb', 22, -38, Math.PI / 2, 12.0)
-    this.placeBuilding('/assets/environment/city/building-a.glb', 38, -22, 0, 12.0)
-    this.placeBuilding('/assets/environment/city/building-c.glb', 38, -38, -Math.PI / 2, 12.0)
+    // South-East
+    this.placeBuilding('./assets/environment/city/building-skyscraper-a.glb', 22, -22, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-e.glb', 22, -38, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-a.glb', 38, -22, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-c.glb', 38, -38, -Math.PI / 2, 12.0)
+
+    // --- NORTH DISTRICT BLOCKS (Uptown High-Rise, Z = 96) ---
+    this.placeBuilding('./assets/environment/city/building-skyscraper-c.glb', -22, 86, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-d.glb', -22, 102, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-f.glb', -38, 86, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-g.glb', -38, 102, Math.PI, 12.0)
+
+    this.placeBuilding('./assets/environment/city/building-skyscraper-b.glb', 22, 86, Math.PI, 12.5)
+    this.placeBuilding('./assets/environment/city/building-a.glb', 22, 102, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-b.glb', 38, 86, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-a.glb', 38, 102, Math.PI / 2, 12.0)
+
+    // --- SOUTH DISTRICT BLOCKS (Industrial & Commercial Waterfront, Z = -96) ---
+    this.placeBuilding('./assets/environment/city/building-c.glb', -22, -86, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-h.glb', -22, -102, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-e.glb', -38, -86, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-f.glb', -38, -102, Math.PI, 12.0)
+
+    this.placeBuilding('./assets/environment/city/building-skyscraper-c.glb', 22, -86, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-d.glb', 22, -102, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-g.glb', 38, -86, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-b.glb', 38, -102, 0, 12.0)
+
+    // --- EAST DISTRICT BLOCKS (Financial Promenade, X = 96) ---
+    this.placeBuilding('./assets/environment/city/building-skyscraper-a.glb', 86, 22, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-b.glb', 86, 38, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-b.glb', 102, 22, Math.PI, 12.0)
+    this.placeBuilding('./assets/environment/city/building-e.glb', 102, 38, Math.PI / 2, 12.0)
+
+    this.placeBuilding('./assets/environment/city/building-f.glb', 86, -22, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-a.glb', 86, -38, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-c.glb', 102, -22, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-c.glb', 102, -38, Math.PI, 12.0)
+
+    // --- WEST DISTRICT BLOCKS (Shopping Quarter & Boulevard, X = -96) ---
+    this.placeBuilding('./assets/environment/city/building-d.glb', -86, 22, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-b.glb', -86, 38, Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-g.glb', -102, 22, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-h.glb', -102, 38, Math.PI, 12.0)
+
+    this.placeBuilding('./assets/environment/city/building-skyscraper-a.glb', -86, -22, Math.PI, 12.0)
+    this.placeBuilding('./assets/environment/city/building-b.glb', -86, -38, -Math.PI / 2, 12.0)
+    this.placeBuilding('./assets/environment/city/building-e.glb', -102, -22, 0, 12.0)
+    this.placeBuilding('./assets/environment/city/building-f.glb', -102, -38, Math.PI / 2, 12.0)
+
+    // --- CORNER OUTER BLOCKS (4) ---
+    // NE Corner (96, 96)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-c.glb', 96, 96, 0, 13.0)
+    // NW Corner (-96, 96)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-b.glb', -96, 96, Math.PI / 2, 13.0)
+    // SE Corner (96, -96)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-a.glb', 96, -96, -Math.PI / 2, 13.0)
+    // SW Corner (-96, -96)
+    this.placeBuilding('./assets/environment/city/building-skyscraper-b.glb', -96, -96, Math.PI, 13.0)
   }
 
   private populateStreetProps() {
-    const coneKey = '/assets/cars/cone.glb'
+    const coneKey = './assets/cars/cone.glb'
     const coneCached = this.modelCache.get(coneKey)
 
     if (coneCached) {
@@ -730,7 +786,7 @@ export class CityWorld {
       })
     }
 
-    const boxKey = '/assets/cars/box.glb'
+    const boxKey = './assets/cars/box.glb'
     const boxCached = this.modelCache.get(boxKey)
 
     if (boxCached) {

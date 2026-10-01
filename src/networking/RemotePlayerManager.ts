@@ -1,17 +1,18 @@
 import type * as THREE from 'three'
 import { RemoteVehicle } from '../vehicle/RemoteVehicle.ts'
 import type { NetworkManager } from './NetworkManager.ts'
+import type { P2PNetworkManager } from './P2PNetworkManager.ts'
 import type { PlayerStateMessage, RoomSnapshotPayload, AuthoritativePlayerState } from '../../shared/src/messages.ts'
 
 export class RemotePlayerManager {
   private scene: THREE.Scene
-  private networkManager: NetworkManager
+  private networkManager: NetworkManager | P2PNetworkManager
   private remoteVehicles = new Map<string, RemoteVehicle>()
 
   private lastSeenMap = new Map<string, number>()
   private staleCheckAccumulator = 0
 
-  constructor(scene: THREE.Scene, networkManager: NetworkManager) {
+  constructor(scene: THREE.Scene, networkManager: NetworkManager | P2PNetworkManager) {
     this.scene = scene
     this.networkManager = networkManager
 

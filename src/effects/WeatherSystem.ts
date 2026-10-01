@@ -91,6 +91,9 @@ export class WeatherSystem {
   private scene: THREE.Scene
   private audioManager?: AudioManager
   private dayNightCycle?: DayNightCycle
+  public getDayNightCycle(): DayNightCycle | undefined {
+    return this.dayNightCycle
+  }
 
   // Weather state
   public currentType: WeatherType = 'CLEAR'

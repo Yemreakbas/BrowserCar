@@ -17,7 +17,7 @@ import { WeatherSystem, type WeatherType, type WeatherPreset } from './effects/W
 import { PoliceChaseSystem } from './effects/PoliceChaseSystem.ts'
 import { TireSmokeSystem } from './effects/TireSmoke.ts'
 import type { RaceResult } from './race/RaceSystem.ts'
-import { NetworkManager } from './networking/NetworkManager.ts'
+import { P2PNetworkManager } from './networking/P2PNetworkManager.ts'
 import { RemotePlayerManager } from './networking/RemotePlayerManager.ts'
 import { getPlayerColorHex } from './vehicle/RemoteVehicle.ts'
 import { VehicleResetSystem } from './vehicle/VehicleResetSystem.ts'
@@ -37,6 +37,10 @@ import {
   setSelectedVehicleId,
 } from './vehicle/VehicleDefinition.ts'
 import { PlayerProfileManager } from './profile/PlayerProfile.ts'
+import { SkidmarkRenderer } from './effects/SkidmarkRenderer.ts'
+import { MinimapHUD } from './ui/MinimapHUD.ts'
+import { SpeedCameraSystem } from './effects/SpeedCameraSystem.ts'
+import { NEON_PRESETS } from './effects/VehicleUnderglow.ts'
 
 // --- 1. DOM & HUD SETUP ---
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -113,6 +117,11 @@ app.innerHTML = `
           <span id="headlights-btn-text">Farlar</span>
           <span class="reset-key-hint">H</span>
         </button>
+        <button id="btn-underglow" class="reset-btn underglow-active" type="button" title="Neon Alt Işıklandırma (U)">
+          <span id="underglow-btn-icon" style="font-size: 13px;">🟣</span>
+          <span id="underglow-btn-text">Neon</span>
+          <span class="reset-key-hint">U</span>
+        </button>
         <button id="btn-weather" class="reset-btn" type="button" title="Hava Durumu: Yağmur / Fırtına / Sis / Güneş (Y)">
           <span id="weather-btn-icon" style="font-size: 13px;">☀️</span>
           <span id="weather-btn-text">Açık</span>
@@ -122,6 +131,16 @@ app.innerHTML = `
           <span id="police-btn-icon" style="font-size: 13px;">🚨</span>
           <span id="police-btn-text">Polis</span>
           <span class="reset-key-hint">J</span>
+        </button>
+        <button id="btn-horn" class="reset-btn" type="button" title="Araç Kornası (E)">
+          <span style="font-size: 13px;">📢</span>
+          <span>Korna</span>
+          <span class="reset-key-hint">E</span>
+        </button>
+        <button id="btn-minimap" class="reset-btn" type="button" title="GPS Radar / Mini-harita (B)">
+          <span style="font-size: 13px;">🧭</span>
+          <span>Radar</span>
+          <span class="reset-key-hint">B</span>
         </button>
       </div>
     </header>
@@ -138,6 +157,7 @@ app.innerHTML = `
     </div>
 
     <div id="reset-screen-flash" class="reset-screen-flash"></div>
+    <div id="radar-flash-overlay" class="radar-flash-overlay"></div>
 
     <!-- Online City Player List Overlay (Phase 15) -->
     <div id="city-player-list-card" class="city-player-list-card" style="display: none;">
@@ -353,6 +373,12 @@ app.innerHTML = `
           <span>Modlar: ESC</span>
           <span>•</span>
           <span>Nitro: Shift/N</span>
+          <span>•</span>
+          <span>Korna: E</span>
+          <span>•</span>
+          <span>Radar: B</span>
+          <span>•</span>
+          <span>Neon: U</span>
           <span>•</span>
           <span>Kamera: V</span>
           <span>•</span>
@@ -679,34 +705,33 @@ app.innerHTML = `
           <input id="mp-name-input" class="mp-input" type="text" placeholder="Racer_1" maxlength="20" style="flex: 1;" />
         </div>
 
-        <!-- Quick Matchmaking & Private Room Code Grid (Phase 18) -->
+        <!-- P2P WebRTC Party / Host & Join System (Cloudflare Pages Static Compatible) -->
         <div class="mp-quick-match-grid">
-          <div class="mp-quick-card">
-            <div class="mp-quick-card-title">
-              <span>⚡</span>
-              <span>HIZLI EŞLEŞME (QUICK JOIN)</span>
+          <div class="mp-quick-card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.06);">
+            <div class="mp-quick-card-title" style="color: #fbbf24;">
+              <span>👑</span>
+              <span>ODA KUR (HOST • 4 HANELİ KOD ÜRET)</span>
             </div>
             <div class="mp-quick-row">
               <select id="mp-quick-mode" class="mp-select" style="flex: 1; padding: 7px 10px; font-size: 12px;">
-                <option value="">Herhangi Bir Mod</option>
                 <option value="CITY_FREE_ROAM">🏙️ Serbest Şehir</option>
-                <option value="RACE">🏁 Yarış Pisti</option>
+                <option value="RACE">🏁 Grand Prix Yarışı</option>
                 <option value="DRIFT">🔥 Drift Arenası</option>
               </select>
-              <button id="btn-quick-join" class="action-btn primary" type="button" style="padding: 7px 14px; font-size: 12px; white-space: nowrap;">
-                ⚡ Hemen Oyna
+              <button id="btn-quick-join" class="action-btn primary" type="button" style="padding: 7px 14px; font-size: 12px; white-space: nowrap; background: linear-gradient(135deg, #f59e0b, #d97706);">
+                👑 Oda Kur
               </button>
             </div>
           </div>
-          <div class="mp-quick-card">
-            <div class="mp-quick-card-title">
-              <span>🔑</span>
-              <span>ÖZEL ODA KODU (PRIVATE CODE)</span>
+          <div class="mp-quick-card" style="border: 1px solid rgba(56, 189, 248, 0.35); background: rgba(56, 189, 248, 0.06);">
+            <div class="mp-quick-card-title" style="color: #38bdf8;">
+              <span>🚀</span>
+              <span>ODAYA KATIL (P2P WEBRTC)</span>
             </div>
             <div class="mp-quick-row">
-              <input id="mp-room-code-input" class="mp-input mp-code-input" type="text" placeholder="A7X9" maxlength="6" style="flex: 1; padding: 7px 10px; font-size: 12px;" />
-              <button id="btn-join-code" class="action-btn secondary" type="button" style="padding: 7px 14px; font-size: 12px; white-space: nowrap;">
-                Koda Katıl
+              <input id="mp-room-code-input" class="mp-input mp-code-input" type="text" placeholder="Örn: 7421" maxlength="6" style="flex: 1; padding: 7px 10px; font-size: 12px; text-transform: uppercase;" />
+              <button id="btn-join-code" class="action-btn secondary" type="button" style="padding: 7px 14px; font-size: 12px; white-space: nowrap; border-color: #38bdf8; color: #38bdf8;">
+                🚀 Odaya Katıl
               </button>
             </div>
           </div>
@@ -927,6 +952,12 @@ const weatherBtnText = document.querySelector<HTMLSpanElement>('#weather-btn-tex
 const btnPolice = document.querySelector<HTMLButtonElement>('#btn-police')!
 const policeBtnIcon = document.querySelector<HTMLSpanElement>('#police-btn-icon')!
 const policeBtnText = document.querySelector<HTMLSpanElement>('#police-btn-text')!
+const btnHorn = document.querySelector<HTMLButtonElement>('#btn-horn')
+const btnMinimap = document.querySelector<HTMLButtonElement>('#btn-minimap')
+const btnUnderglow = document.querySelector<HTMLButtonElement>('#btn-underglow')
+const underglowBtnIcon = document.querySelector<HTMLSpanElement>('#underglow-btn-icon')
+const underglowBtnText = document.querySelector<HTMLSpanElement>('#underglow-btn-text')
+const radarFlashOverlay = document.querySelector<HTMLDivElement>('#radar-flash-overlay')
 const spawnBtnText = document.querySelector<HTMLSpanElement>('#spawn-btn-text')!
 
 const hudAssetStatus = document.querySelector<HTMLSpanElement>('#hud-asset-status')!
@@ -1273,6 +1304,9 @@ async function bootstrap() {
         raceCountdownOverlay.style.display = 'flex'
         raceCountdownText.textContent = text
         if (color) raceCountdownText.style.color = color
+        raceCountdownText.style.animation = 'none'
+        void raceCountdownText.offsetWidth
+        raceCountdownText.style.animation = 'countdown-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
       } else {
         raceCountdownOverlay.style.display = 'none'
       }
@@ -1493,9 +1527,9 @@ async function bootstrap() {
     },
   }
 
-  // 7. Initialize Multiplayer Network Manager
-  const networkManager = new NetworkManager()
-  if (mpStatusSub) mpStatusSub.textContent = `URL: ${networkManager.getServerUrl()}`
+  // 7. Initialize Multiplayer Network Manager (WebRTC P2P PeerJS)
+  const networkManager = new P2PNetworkManager()
+  if (mpStatusSub) mpStatusSub.textContent = `P2P WebRTC: ${networkManager.getServerUrl()}`
   const remotePlayerManager = new RemotePlayerManager(scene, networkManager)
 
   // 7b. Initialize Driving Audio Manager (Phase 22)
@@ -1618,10 +1652,12 @@ async function bootstrap() {
     if (level === 0) {
       hudPoliceContainer.style.display = 'none'
       btnPolice.classList.remove('police-active')
+      policeBtnIcon.textContent = '🚓'
       policeBtnText.textContent = 'Polis'
     } else {
       hudPoliceContainer.style.display = 'flex'
       btnPolice.classList.add('police-active')
+      policeBtnIcon.textContent = '🚨'
       policeBtnText.textContent = `★ ${level}`
     }
 
@@ -1661,6 +1697,78 @@ async function bootstrap() {
   }
 
   btnPolice.addEventListener('click', togglePoliceChase)
+
+  // 7g. Initialize Dynamic Tire Skidmark Renderer (Phase 32)
+  const skidmarkRenderer = new SkidmarkRenderer(scene)
+
+  // 7h. Initialize GPS Radar Minimap HUD (Phase 32)
+  const minimapHUD = new MinimapHUD()
+
+  // 7i. Initialize Speed Camera Radar Traps (Phase 32)
+  const speedCameraSystem = new SpeedCameraSystem(scene)
+
+  const triggerRadarFlash = () => {
+    if (radarFlashOverlay) {
+      radarFlashOverlay.classList.add('active')
+      setTimeout(() => {
+        radarFlashOverlay.classList.remove('active')
+      }, 90)
+    }
+  }
+
+  speedCameraSystem.onSpeedViolation = (speedKmh, limitKmh, camName) => {
+    triggerRadarFlash()
+    showResetToast(`📸 RADAR! ${speedKmh} km/h (Limit: ${limitKmh}) • ${camName}`, 'alert', 3200)
+    followCamera.addTrauma(0.35)
+  }
+
+  // 7j. Wire Turbo Flutter / Blow-Off Valve
+  vehicle.onThrottleLiftOff = (intensity) => {
+    audioManager.playTurboBlowOff(intensity)
+  }
+
+  // 7k. Horn Action & Keybinding
+  const triggerHorn = () => {
+    audioManager.playHorn()
+    vehicle.headlights.flashHighBeams(0.35)
+    btnHorn?.classList.add('horn-active')
+    setTimeout(() => {
+      btnHorn?.classList.remove('horn-active')
+    }, 250)
+  }
+
+  btnHorn?.addEventListener('click', triggerHorn)
+  btnMinimap?.addEventListener('click', () => {
+    const isVis = minimapHUD.toggle()
+    showResetToast(isVis ? '🧭 Radar Açıldı' : '🧭 Radar Gizlendi', 'info', 1200)
+  })
+
+  // 7l. Neon Underglow Controller & Keybinding (U)
+  const cycleNeonUnderglow = () => {
+    const underglow = vehicle.underglow
+    if (!underglow.isEnabled) {
+      underglow.isEnabled = true
+      underglow.group.visible = true
+      const preset = underglow.getCurrentPreset()
+      btnUnderglow?.classList.add('underglow-active')
+      if (underglowBtnText) underglowBtnText.textContent = preset.name.split(' ')[0]
+      showResetToast(`🟣 Neon: ${preset.name}`, 'info', 1400)
+    } else if (underglow.currentColorIndex === NEON_PRESETS.length - 1) {
+      underglow.isEnabled = false
+      underglow.group.visible = false
+      underglow.currentColorIndex = 0
+      btnUnderglow?.classList.remove('underglow-active')
+      if (underglowBtnText) underglowBtnText.textContent = 'Kapalı'
+      showResetToast('⚫ Neon Alt Işık Kapandı', 'info', 1200)
+    } else {
+      const preset = underglow.cycleColor()
+      btnUnderglow?.classList.add('underglow-active')
+      if (underglowBtnText) underglowBtnText.textContent = preset.name.split(' ')[0]
+      showResetToast(`🟣 Neon: ${preset.name}`, 'info', 1400)
+    }
+  }
+
+  btnUnderglow?.addEventListener('click', cycleNeonUnderglow)
 
   // 8. Initialize AI Manager & Mode Manager (Default: City Free Roam)
 
@@ -2304,41 +2412,46 @@ async function bootstrap() {
     playerProfileManager.setDisplayName(val)
   })
 
-  // Phase 18: Quick Join
+  // P2P: Host Creates Room with 4-digit code
   btnQuickJoin.addEventListener('click', async () => {
     btnQuickJoin.disabled = true
-    btnQuickJoin.textContent = 'Eşleşiliyor...'
+    btnQuickJoin.textContent = 'Oda Kuruluyor...'
     try {
-      const preferredMode = mpQuickMode.value || undefined
-      await networkManager.quickJoin({
-        preferredMode,
-        playerName: mpNameInput.value.trim() || undefined,
-      })
+      const preferredMode = (mpQuickMode.value || 'CITY_FREE_ROAM') as 'CITY_FREE_ROAM' | 'RACE' | 'DRIFT'
+      const code = await networkManager.createHostRoom(preferredMode)
+      showResetToast(`👑 Oda Kuruldu! Kod: ${code}`, 'info', 4000)
+      if (mpRoomView) mpRoomView.style.display = 'flex'
+      if (mpLobbyView) mpLobbyView.style.display = 'none'
+      if (mpRoomCodeDisplay) mpRoomCodeDisplay.textContent = code
     } catch (err: any) {
-      alert(err.message || 'Hızlı eşleşme başarısız oldu')
+      alert(err.message || 'Oda kurulamadı')
     } finally {
       btnQuickJoin.disabled = false
-      btnQuickJoin.textContent = '⚡ Hemen Oyna'
+      btnQuickJoin.textContent = '👑 Oda Kur'
     }
   })
 
-  // Phase 18: Join by Private Room Code
+  // P2P: Guest Joins Host Room with code
   btnJoinCode.addEventListener('click', async () => {
     const code = mpRoomCodeInput.value.trim().toUpperCase()
     if (!code) {
-      alert('Lütfen katılmak için 4 haneli oda kodunu girin (Örn: A7X9)')
+      alert('Lütfen katılmak için 4 haneli oda kodunu girin (Örn: 7421)')
       return
     }
     btnJoinCode.disabled = true
-    btnJoinCode.textContent = 'Katılınıyor...'
+    btnJoinCode.textContent = 'Bağlanılıyor...'
     try {
       await networkManager.joinRoomByCode(code, mpNameInput.value.trim() || undefined)
       mpRoomCodeInput.value = ''
+      showResetToast(`🚀 Odaya Katıldın! Kod: ${code}`, 'info', 3000)
+      if (mpRoomView) mpRoomView.style.display = 'flex'
+      if (mpLobbyView) mpLobbyView.style.display = 'none'
+      if (mpRoomCodeDisplay) mpRoomCodeDisplay.textContent = code
     } catch (err: any) {
-      alert(err.message || 'Odaya katılınamadı. Kod geçersiz veya oda dolu olabilir.')
+      alert(err.message || 'Odaya bağlanılamadı. Kodun doğru olduğundan ve Hostun odada olduğundan emin olun.')
     } finally {
       btnJoinCode.disabled = false
-      btnJoinCode.textContent = 'Koda Katıl'
+      btnJoinCode.textContent = '🚀 Odaya Katıl'
     }
   })
 
@@ -2562,11 +2675,13 @@ async function bootstrap() {
   const doRespawn = () => {
     vehicleResetSystem.respawn('manual')
     followCamera.snap()
+    skidmarkRenderer.reset()
   }
 
   const doCycleSpawn = () => {
     modeManager.cycleSpawn()
     followCamera.snap()
+    skidmarkRenderer.reset()
     if (vehicle && vehicle.rigidBody) {
       const p = vehicle.root.position
       const q = vehicle.root.quaternion
@@ -3031,8 +3146,16 @@ async function bootstrap() {
         break
       }
       case 'KeyM':
-      case 'KeyU':
         toggleMute()
+        break
+      case 'KeyE':
+        triggerHorn()
+        break
+      case 'KeyB':
+        minimapHUD.toggle()
+        break
+      case 'KeyU':
+        cycleNeonUnderglow()
         break
       case 'KeyR':
         doRespawn()
@@ -3206,7 +3329,7 @@ async function bootstrap() {
     vehicle.damageSystem.update(delta, vehicle.root.position, weatherCarVel, vehicle.getForwardVector())
 
     // 9.2e Police Chase & Heat System Simulation (Phase 31.6)
-    if (modeManager.getActiveMode().modeType === GameModeType.CITY) {
+    if (modeManager.getActiveMode().modeType === GameModeType.CITY_FREE_ROAM) {
       if (speedKmh > 115) {
         policeChase.addHeatScore(delta * 2.5)
       }
@@ -3257,10 +3380,29 @@ async function bootstrap() {
       isDrifting: vehicle.isDrifting,
       slipAngleRad: vehicle.slipAngle,
       isNitro: vehicle.isNitroActive,
+      isRevLimiter: vehicle.isRevLimiterActive,
     })
 
     // 9.3 Active Game Mode Update
     modeManager.update(delta)
+
+    // 9.3b Dynamic Tire Skidmarks Ribbon Simulation (Phase 32)
+    skidmarkRenderer.update(delta, vehicle)
+
+    // 9.3c Camera Rumble on Rev Limiter / Burnout
+    if (vehicle.isRevLimiterActive) {
+      followCamera.addTrauma(0.12 * delta)
+    }
+
+    // 9.3d Speed Camera Radar Traps Simulation (Phase 32)
+    if (modeManager.getActiveMode().modeType === GameModeType.CITY_FREE_ROAM) {
+      speedCameraSystem.update(delta, vehicle, policeChase, audioManager)
+    }
+
+    // 9.3e GPS Radar Minimap HUD Update (Phase 32)
+    const activeMode = modeManager.getActiveMode()
+    const isRace = activeMode.modeType === GameModeType.RACE
+    minimapHUD.update(vehicle, policeChase, aiManager, remotePlayerManager.getAllRemoteVehicles(), raceTrack, isRace)
 
     // 9.4 Tire Smoke Simulation Update (Phase 9)
     tireSmoke.update(delta)

@@ -2,6 +2,11 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { AudioManager } from '../audio/AudioManager.ts'
 import type { Vehicle } from '../vehicle/Vehicle.ts'
+import {
+  checkCityFeeler,
+  getSmartPursuitTarget,
+  resolveCityObstaclePenetration,
+} from '../world/CityCollisionHelper.ts'
 
 export type PursuitState = 'CLEAR' | 'CHASE' | 'EVADING' | 'BUSTED' | 'ESCAPED'
 
@@ -55,7 +60,6 @@ export class PoliceChaseSystem {
   private tempToPlayer = new THREE.Vector3()
   private tempForward = new THREE.Vector3()
   private tempRight = new THREE.Vector3()
-  private tempPredictPos = new THREE.Vector3()
   private tempDiff = new THREE.Vector3()
 
   // Callbacks
@@ -99,6 +103,7 @@ export class PoliceChaseSystem {
         roughness: 0.4,
       })
       const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat)
+      placeholder.name = 'placeholder_chassis'
       placeholder.position.y = 0.55
       bodyGroup.add(placeholder)
 
@@ -153,7 +158,7 @@ export class PoliceChaseSystem {
 
     const loader = new GLTFLoader()
     loader.load(
-      '/assets/cars/police.glb',
+      './assets/cars/police.glb',
       (gltf) => {
         this.sharedPoliceModel = gltf.scene
         this.sharedPoliceModel.scale.set(1.12, 1.12, 1.12)
@@ -163,7 +168,7 @@ export class PoliceChaseSystem {
         for (const unit of this.units) {
           if (!unit.mesh) {
             // Remove placeholder box
-            const placeholder = unit.bodyGroup.children.find((c) => (c as THREE.Mesh).geometry instanceof THREE.BoxGeometry && (c as THREE.Mesh).geometry.parameters?.width === 1.85)
+            const placeholder = unit.bodyGroup.getObjectByName('placeholder_chassis')
             if (placeholder) {
               unit.bodyGroup.remove(placeholder)
             }
@@ -355,12 +360,11 @@ export class PoliceChaseSystem {
         minDistanceToPlayer = distToPlayer
       }
 
-      // 3. Pursuit AI Steering & Velocity
-      // Predict player position 0.6 seconds ahead
-      this.tempForward.set(0, 0, 1).applyQuaternion(playerVehicle.root.quaternion)
-      this.tempPredictPos.copy(playerPos).addScaledVector(this.tempForward, Math.min(playerSpeedMs * 0.65, 20))
+      // 3. Pursuit AI Steering & Velocity with Smart Navigation and Building Obstacle Avoidance
+      // If direct line-of-sight to player is blocked by a building, route towards the nearest corner/intersection!
+      const smartTarget = getSmartPursuitTarget(unit.root.position, playerPos)
 
-      this.tempToPlayer.subVectors(this.tempPredictPos, unit.root.position)
+      this.tempToPlayer.subVectors(smartTarget, unit.root.position)
       this.tempToPlayer.y = 0
       this.tempToPlayer.normalize()
 
@@ -373,31 +377,55 @@ export class PoliceChaseSystem {
 
       // Steering angle with PIT flank offset
       const angleDiff = Math.atan2(rightDot, fwdDot)
-      const flankOffset = (i === 1 ? 0.22 : i === 2 ? -0.22 : 0)
-      const steerInput = THREE.MathUtils.clamp(angleDiff * 1.5 + flankOffset, -0.65, 0.65)
+      const flankOffset = (i === 1 ? 0.14 : i === 2 ? -0.14 : 0)
+      let steerInput = THREE.MathUtils.clamp(angleDiff * 1.6 + flankOffset, -0.75, 0.75)
+
+      // Active Feeler Whiskers for Building / Obstacle Avoidance
+      const feelerCenter = checkCityFeeler(unit.root.position, this.tempForward, 9.5)
+      if (feelerCenter.hit) {
+        // Feeler detected wall ahead! Steer away into open road
+        const leftVec = this.tempForward.clone().addScaledVector(this.tempRight, 0.6).normalize()
+        const rightVec = this.tempForward.clone().addScaledVector(this.tempRight, -0.6).normalize()
+        const feelerLeft = checkCityFeeler(unit.root.position, leftVec, 8.0)
+        const feelerRight = checkCityFeeler(unit.root.position, rightVec, 8.0)
+
+        if (feelerLeft.dist > feelerRight.dist) {
+          steerInput = Math.min(steerInput + 0.65, 0.85)
+        } else {
+          steerInput = Math.max(steerInput - 0.65, -0.85)
+        }
+      }
 
       // Smooth turning
       unit.root.rotation.y += steerInput * unit.steerRate * delta
 
-      // Acceleration & Braking
+      // Acceleration & Braking (slow down for tight corners or obstacles)
       let targetSpeed = unit.maxSpeed
-      if (distToPlayer < 7.0 && fwdDot > 0.8) {
+      if (feelerCenter.hit && feelerCenter.dist < 5.0) {
+        targetSpeed = 8.0 // Brake to corner safely without hitting facade
+      } else if (distToPlayer < 7.0 && fwdDot > 0.8) {
         // Match player speed to execute ramming / boxing
         targetSpeed = Math.max(playerSpeedMs + 3.0, 10.0)
       } else if (fwdDot < 0.2) {
         // Sharp turn ahead, slow down slightly
-        targetSpeed = 16.0
+        targetSpeed = 14.0
       }
 
       if (unit.currentSpeed < targetSpeed) {
         unit.currentSpeed = Math.min(targetSpeed, unit.currentSpeed + unit.acceleration * delta)
       } else {
-        unit.currentSpeed = Math.max(targetSpeed, unit.currentSpeed - unit.acceleration * 1.4 * delta)
+        unit.currentSpeed = Math.max(targetSpeed, unit.currentSpeed - unit.acceleration * 1.5 * delta)
       }
 
       // Move forward
       this.tempForward.set(0, 0, 1).applyQuaternion(unit.root.quaternion)
       unit.root.position.addScaledVector(this.tempForward, unit.currentSpeed * delta)
+
+      // Hard AABB Obstacle Collision Clamping (Guarantees cruiser never phases through buildings!)
+      const wasBlocked = resolveCityObstaclePenetration(unit.root.position, 1.35)
+      if (wasBlocked) {
+        unit.currentSpeed = Math.min(unit.currentSpeed, 4.0)
+      }
 
       // Physical Ramming Impulse with Player
       if (distToPlayer < 3.2 && distToPlayer > 0.1) {
@@ -431,7 +459,7 @@ export class PoliceChaseSystem {
         this.onPursuitStateChanged('CHASE', `🚨 KISKACA ALINDIN! (%${this.bustPercent})`)
       }
 
-      if (this.bustTimer >= this.BUST_DURATION && this.pursuitState !== 'BUSTED') {
+      if (this.bustTimer >= this.BUST_DURATION && (this.pursuitState as string) !== 'BUSTED') {
         this.handleBusted(playerVehicle)
       }
     } else {
@@ -451,7 +479,7 @@ export class PoliceChaseSystem {
           }
         }
 
-        if (this.escapeTimer >= this.ESCAPE_DURATION && this.pursuitState !== 'ESCAPED') {
+        if (this.escapeTimer >= this.ESCAPE_DURATION && (this.pursuitState as string) !== 'ESCAPED') {
           this.handleEscaped()
         }
       } else {
@@ -471,7 +499,7 @@ export class PoliceChaseSystem {
   /**
    * Player was trapped and arrested by the police
    */
-  private handleBusted(playerVehicle: Vehicle): void {
+  private handleBusted(_playerVehicle: Vehicle): void {
     if (this.pursuitState === 'BUSTED') return
     this.pursuitState = 'BUSTED'
     this.bustTimer = 0

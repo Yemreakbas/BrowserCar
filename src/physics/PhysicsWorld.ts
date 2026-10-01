@@ -30,9 +30,9 @@ export class PhysicsWorld {
     this.world.createCollider(trackGroundDesc)
 
     // 3. Add Outer Perimeter Safety Boundaries (prevents driving off world)
-    const mapLimit = 88.0
+    const mapLimit = 145.0
     const wallThickness = 1.0
-    const wallHeight = 4.0
+    const wallHeight = 5.0
 
     // North wall (Z = +mapLimit)
     this.createStaticBoxCollider(0, wallHeight / 2, mapLimit, mapLimit, wallHeight / 2, wallThickness)
@@ -47,7 +47,7 @@ export class PhysicsWorld {
     this.createCityBlockColliders()
 
     this.isInitialized = true
-    console.log('✓ Rapier 3D Physics initialized successfully with city colliders')
+    console.log('✓ Rapier 3D Physics initialized successfully with expanded metropolitan city colliders')
   }
 
   public createStaticBoxCollider(
@@ -88,50 +88,60 @@ export class PhysicsWorld {
   }
 
   private createCityBlockColliders() {
-    // 4 Main Quadrant Blocks: Centers (+-32, +-32), Size: 44m x 44m (halfExtent: 22m x 22m)
-    // We add raised curb step colliders so the car hits the sidewalks
+    // 16 Full Metropolitan Quadrant Blocks: Centers (+-32, +-96), Size: 42m x 42m (halfExtent: 21m x 21m)
     const blockCenters = [
-      { x: -32, z: 32 },  // NW
-      { x: 32, z: 32 },   // NE
-      { x: -32, z: -32 }, // SW
-      { x: 32, z: -32 },  // SE
+      // Central 4
+      { x: -32, z: 32 },
+      { x: 32, z: 32 },
+      { x: -32, z: -32 },
+      { x: 32, z: -32 },
+
+      // North District (2)
+      { x: -32, z: 96 },
+      { x: 32, z: 96 },
+
+      // South District (2)
+      { x: -32, z: -96 },
+      { x: 32, z: -96 },
+
+      // East District (2)
+      { x: 96, z: 32 },
+      { x: 96, z: -32 },
+
+      // West District (2)
+      { x: -96, z: 32 },
+      { x: -96, z: -32 },
+
+      // Corners (4)
+      { x: 96, z: 96 },
+      { x: -96, z: 96 },
+      { x: 96, z: -96 },
+      { x: -96, z: -96 },
     ]
 
     // Raised sidewalk slab colliders (height 0.2m)
     blockCenters.forEach((center) => {
-      this.createStaticBoxCollider(center.x, 0.1, center.z, 22.0, 0.1, 22.0, 0.6, 0.1)
-    })
+      this.createStaticBoxCollider(center.x, 0.1, center.z, 21.0, 0.1, 21.0, 0.6, 0.1)
 
-    // Major Building Obstacle Colliders (so car collides firmly with building facades)
-    // Each block contains 4 primary building footprints (~10m x 10m each, halfExtent 5m x 5m, height 15m)
-    const buildingObstacles = [
-      // NW Block
-      { x: -22, z: 22, hX: 5.5, hZ: 5.5 },
-      { x: -22, z: 38, hX: 5.5, hZ: 5.5 },
-      { x: -38, z: 22, hX: 5.5, hZ: 5.5 },
-      { x: -38, z: 38, hX: 5.5, hZ: 5.5 },
-
-      // NE Block
-      { x: 22, z: 22, hX: 5.5, hZ: 5.5 },
-      { x: 22, z: 38, hX: 5.5, hZ: 5.5 },
-      { x: 38, z: 22, hX: 5.5, hZ: 5.5 },
-      { x: 38, z: 38, hX: 5.5, hZ: 5.5 },
-
-      // SW Block
-      { x: -22, z: -22, hX: 5.5, hZ: 5.5 },
-      { x: -22, z: -38, hX: 5.5, hZ: 5.5 },
-      { x: -38, z: -22, hX: 5.5, hZ: 5.5 },
-      { x: -38, z: -38, hX: 5.5, hZ: 5.5 },
-
-      // SE Block
-      { x: 22, z: -22, hX: 5.5, hZ: 5.5 },
-      { x: 22, z: -38, hX: 5.5, hZ: 5.5 },
-      { x: 38, z: -22, hX: 5.5, hZ: 5.5 },
-      { x: 38, z: -38, hX: 5.5, hZ: 5.5 },
-    ]
-
-    buildingObstacles.forEach((b) => {
-      this.createStaticBoxCollider(b.x, 7.5, b.z, b.hX, 7.5, b.hZ, 0.4, 0.2)
+      // 4 Main high-rise building colliders per block (~10m x 10m each, height 15m)
+      const offsets = [
+        { dx: -10, dz: -10 },
+        { dx: 10, dz: -10 },
+        { dx: -10, dz: 10 },
+        { dx: 10, dz: 10 },
+      ]
+      offsets.forEach((off) => {
+        this.createStaticBoxCollider(
+          center.x + off.dx,
+          7.5,
+          center.z + off.dz,
+          6.0,
+          7.5,
+          6.0,
+          0.4,
+          0.2
+        )
+      })
     })
   }
 

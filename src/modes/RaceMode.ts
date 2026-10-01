@@ -49,6 +49,7 @@ export class RaceMode implements IGameMode {
     context.hud.setWrongWayVisible?.(false)
 
     this.resultsShown = false
+    this.lastCountdownText = null
     this.cleanupFns.forEach((fn) => fn())
     this.cleanupFns = []
 
@@ -304,18 +305,27 @@ export class RaceMode implements IGameMode {
   }
 
   public onExit(context: ModeContext): void {
-    context.aiManager?.clear()
-    context.hud.setRaceCountdown?.(null)
-    context.hud.setWrongWayVisible?.(false)
-    context.hud.hideRaceResults?.()
-
     this.cleanupFns.forEach((fn) => fn())
     this.cleanupFns = []
+    this.raceSystem.reset(context.raceTrack)
+    this.lastCountdownText = null
+    context.aiManager?.clear()
+    context.hud.setRaceCountdown?.(null)
+    context.hud.setTelemetryVisible(false)
+    context.hud.setWrongWayVisible?.(false)
+    context.hud.hideRaceResults?.()
+    context.raceTrack.setVisible(false)
+
+    if (context.tireSmoke) {
+      context.tireSmoke.reset()
+    }
   }
 
   public onReset(context: ModeContext): void {
     this.resultsShown = false
+    this.lastCountdownText = null
     context.hud.hideRaceResults?.()
+    context.hud.setRaceCountdown?.(null)
     context.hud.setWrongWayVisible?.(false)
 
     if (this.isOnlineSession) {

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { ExhaustFlameVFX } from '../effects/ExhaustFlameVFX.ts'
 import { VehicleHeadlights } from '../effects/VehicleHeadlights.ts'
+import { checkCityFeeler, resolveCityObstaclePenetration } from '../world/CityCollisionHelper.ts'
 
 export interface AIOptimizationConfig {
   id: string
@@ -25,7 +26,7 @@ export class AIVehicle {
   private scene: THREE.Scene
 
   // Car model and wheels
-  private carModel: THREE.Group | null = null
+  public carModel: THREE.Group | null = null
   private wheelFrontLeft: THREE.Object3D | null = null
   private wheelFrontRight: THREE.Object3D | null = null
   private wheelBackLeft: THREE.Object3D | null = null
@@ -349,6 +350,25 @@ export class AIVehicle {
       }
     }
 
+    // Check building obstacles ahead in city traffic
+    if (this.role === 'TRAFFIC') {
+      const feelerCenter = checkCityFeeler(this.root.position, this.tempForward, 8.5)
+      if (feelerCenter.hit) {
+        avoidanceBrake = true
+        targetSpeed = Math.min(targetSpeed, 6.0)
+        // Steer away from obstacle
+        const leftVec = this.tempForward.clone().addScaledVector(this.tempRight, 0.6).normalize()
+        const rightVec = this.tempForward.clone().addScaledVector(this.tempRight, -0.6).normalize()
+        const feelerLeft = checkCityFeeler(this.root.position, leftVec, 7.5)
+        const feelerRight = checkCityFeeler(this.root.position, rightVec, 7.5)
+        if (feelerLeft.dist > feelerRight.dist) {
+          steerDemand = Math.min(steerDemand + 0.5, 0.75)
+        } else {
+          steerDemand = Math.max(steerDemand - 0.5, -0.75)
+        }
+      }
+    }
+
     // 4. Nitro Boost Logic (for Racers)
     if (this.role === 'RACER' && !this.isFinished) {
       this.nitroCooldown -= delta
@@ -394,6 +414,14 @@ export class AIVehicle {
     const moveDist = this.currentSpeed * delta
     this.tempForward.set(0, 0, 1).applyQuaternion(this.root.quaternion)
     this.root.position.addScaledVector(this.tempForward, moveDist)
+
+    // Resolve penetration with city buildings
+    if (this.role === 'TRAFFIC') {
+      const wasPushed = resolveCityObstaclePenetration(this.root.position, 1.3)
+      if (wasPushed) {
+        this.currentSpeed = Math.min(this.currentSpeed, 4.0)
+      }
+    }
 
     // 7. Visual Body Tilt (Pitch and Roll)
     const turnRoll = -this.currentSteerAngle * (this.currentSpeed / this.maxSpeed) * 0.08

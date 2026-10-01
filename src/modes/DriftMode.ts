@@ -216,14 +216,21 @@ export class DriftMode implements IGameMode {
     // 4. Emit Tire Smoke during drift slides or handbrake turns
     if (
       context.tireSmoke &&
-      (driftState.isDrifting || (context.vehicle.isHandbrakeActive && Math.abs(context.vehicle.currentSpeed) > 3.0))
+      (driftState.isDrifting ||
+        (context.vehicle.isHandbrakeActive && Math.abs(context.vehicle.currentSpeed) > 3.0) ||
+        context.vehicle.isRevLimiterActive)
     ) {
       this.smokeTimer += delta
-      if (this.smokeTimer >= 0.03) {
+      const smokeInterval = context.vehicle.isRevLimiterActive ? 0.022 : 0.03
+      if (this.smokeTimer >= smokeInterval) {
         this.smokeTimer = 0
         context.vehicle.getRearWheelPositions(this.tempWheelL, this.tempWheelR)
         const linvel = context.vehicle.rigidBody.linvel()
-        this.tempCarVel.set(linvel.x, linvel.y, linvel.z)
+        if (context.vehicle.isRevLimiterActive) {
+          this.tempCarVel.set((Math.random() - 0.5) * 5.0, 1.5, (Math.random() - 0.5) * 5.0)
+        } else {
+          this.tempCarVel.set(linvel.x, linvel.y, linvel.z)
+        }
 
         context.tireSmoke.emit(this.tempWheelL, this.tempCarVel)
         context.tireSmoke.emit(this.tempWheelR, this.tempCarVel)
@@ -329,8 +336,11 @@ export class DriftMode implements IGameMode {
   public onExit(context: ModeContext): void {
     this.cleanupFns.forEach((fn) => fn())
     this.cleanupFns = []
+    this.driftSystem.reset()
     context.hud.setDriftCountdown?.(null)
+    context.hud.setDriftCardVisible(false)
     context.hud.hideDriftResults?.()
+    context.driftTrack.setVisible(false)
 
     if (context.tireSmoke) {
       context.tireSmoke.reset()

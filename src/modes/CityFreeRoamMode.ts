@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { type IGameMode, GameModeType, MapType, type ModeContext } from './types.ts'
+import { DEFAULT_GLOBAL_ROOM_ID } from '../../shared/src/constants.ts'
 
 export class CityFreeRoamMode implements IGameMode {
   public readonly modeType = GameModeType.CITY_FREE_ROAM
@@ -23,8 +24,19 @@ export class CityFreeRoamMode implements IGameMode {
     context.hud.setSpawnButtonVisible(true)
     context.hud.setSubtitle('Şehir • Serbest Gezinti', this.badgeColor)
 
+    const net = context.networkManager
+    const isOnline = !!(net && net.isConnected())
+    const currentRoom = net?.getCurrentRoom()
+
+    // Auto-join global city room if online and returning from drift/race modes
+    if (isOnline && (!currentRoom || currentRoom.mode !== 'CITY_FREE_ROAM')) {
+      net.joinRoom(DEFAULT_GLOBAL_ROOM_ID, net.getPlayerName() || undefined).catch((err) => {
+        console.warn('[CityFreeRoamMode] Auto-join city room failed:', err)
+      })
+    }
+
     this.applySpawn(context, this.currentSpawnIndex)
-    context.aiManager?.initCityTraffic(context.cityWorld)
+    // Traffic removed per user request: open city streets for multiplayer
     context.weatherSystem?.registerAsphaltMaterials(context.cityWorld.getAsphaltMaterials())
   }
 
@@ -43,14 +55,21 @@ export class CityFreeRoamMode implements IGameMode {
 
     if (
       context.tireSmoke &&
-      (context.vehicle.isDrifting || (context.vehicle.isHandbrakeActive && Math.abs(context.vehicle.currentSpeed) > 3.0))
+      (context.vehicle.isDrifting ||
+        (context.vehicle.isHandbrakeActive && Math.abs(context.vehicle.currentSpeed) > 3.0) ||
+        context.vehicle.isRevLimiterActive)
     ) {
       this.smokeTimer += delta
-      if (this.smokeTimer >= 0.035) {
+      const smokeInterval = context.vehicle.isRevLimiterActive ? 0.022 : 0.035
+      if (this.smokeTimer >= smokeInterval) {
         this.smokeTimer = 0
         context.vehicle.getRearWheelPositions(this.tempWheelL, this.tempWheelR)
         const linvel = context.vehicle.rigidBody.linvel()
-        this.tempCarVel.set(linvel.x, linvel.y, linvel.z)
+        if (context.vehicle.isRevLimiterActive) {
+          this.tempCarVel.set((Math.random() - 0.5) * 5.0, 1.5, (Math.random() - 0.5) * 5.0)
+        } else {
+          this.tempCarVel.set(linvel.x, linvel.y, linvel.z)
+        }
         context.tireSmoke.emit(this.tempWheelL, this.tempCarVel)
         context.tireSmoke.emit(this.tempWheelR, this.tempCarVel)
       }
@@ -78,7 +97,6 @@ export class CityFreeRoamMode implements IGameMode {
 
   public onReset(context: ModeContext): void {
     this.applySpawn(context, this.currentSpawnIndex)
-    context.aiManager?.initCityTraffic(context.cityWorld)
   }
 
   public getRespawnPoint(context: ModeContext): { position: THREE.Vector3; rotationY: number; name: string } {

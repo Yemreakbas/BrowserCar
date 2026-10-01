@@ -149,7 +149,6 @@ export class DayNightCycle {
     // Sun rises at 6:00 (East), peaks at 12:00 (Zenith), sets at 18:00 (West)
     const sunAngle = ((this.timeOfDay - 6.0) / 24.0) * Math.PI * 2
     const sunElevation = Math.sin(sunAngle)
-    const isDay = sunElevation > -0.08
 
     const orbitRadius = 110
     const sunX = Math.cos(sunAngle) * orbitRadius

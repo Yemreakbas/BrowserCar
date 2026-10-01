@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { Vehicle, VehicleInput } from './Vehicle.ts'
 import type { ModeManager } from '../modes/ModeManager.ts'
 import type { NetworkManager } from '../networking/NetworkManager.ts'
+import type { P2PNetworkManager } from '../networking/P2PNetworkManager.ts'
 import type { TireSmokeSystem } from '../effects/TireSmoke.ts'
 
 export type ResetReason = 'manual' | 'fall' | 'flipped' | 'stuck'
@@ -17,7 +18,7 @@ export interface ResetEvent {
 export interface VehicleResetSystemOptions {
   vehicle: Vehicle
   modeManager: ModeManager
-  networkManager?: NetworkManager
+  networkManager?: NetworkManager | P2PNetworkManager
   tireSmoke?: TireSmokeSystem
   onNotice?: (message: string, type: 'info' | 'warning' | 'alert', durationMs?: number) => void
   onHint?: (hint: string | null) => void
@@ -31,7 +32,7 @@ export interface VehicleResetSystemOptions {
 export class VehicleResetSystem {
   private vehicle: Vehicle
   private modeManager: ModeManager
-  private networkManager?: NetworkManager
+  private networkManager?: NetworkManager | P2PNetworkManager
   private tireSmoke?: TireSmokeSystem
   private onNotice?: (message: string, type: 'info' | 'warning' | 'alert', durationMs?: number) => void
   private onHint?: (hint: string | null) => void

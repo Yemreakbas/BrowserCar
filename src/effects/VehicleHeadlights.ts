@@ -197,6 +197,19 @@ export class VehicleHeadlights {
     }
   }
 
+  /**
+   * Quick headlight flash when honking or alerting traffic
+   */
+  public flashHighBeams(durationSeconds: number = 0.35): void {
+    const prevEnabled = this.isEnabled
+    this.setHeadlights(true)
+    setTimeout(() => {
+      if (!prevEnabled) {
+        this.setHeadlights(false)
+      }
+    }, durationSeconds * 1000)
+  }
+
   public dispose() {
     this.frontLensMaterial.dispose()
     this.rearLensMaterial.dispose()

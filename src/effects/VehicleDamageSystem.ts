@@ -28,6 +28,7 @@ export class VehicleDamageSystem {
   private bodyMesh: THREE.Mesh | null = null
   private originalPositions: Float32Array | null = null
   private isDeformed: boolean = false
+  public get isMeshDeformed(): boolean { return this.isDeformed }
 
   // Collision Spark VFX
   private sparksGroup: THREE.Group

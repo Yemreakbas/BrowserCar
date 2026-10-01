@@ -214,8 +214,25 @@ export class RaceSystem {
     this.lapMessage = `🏁 YARIŞ BİTTİ! Toplam: ${this.formatTime(total)} (${rating})`
   }
 
-  public reset(raceTrack: RaceTrack): void {
-    this.startRace(raceTrack)
+  public reset(raceTrack?: RaceTrack): void {
+    this.state = RaceState.PRE_RACE
+    this.currentLap = 1
+    this.currentLapTime = 0
+    this.totalRaceTime = 0
+    this.bestLapTime = null
+    this.lapTimes = []
+    this.nextCheckpointIndex = 1
+    this.isWrongWay = false
+    this.lapMessage = null
+    this.result = null
+
+    if (raceTrack) {
+      raceTrack.lapState.currentLap = 1
+      raceTrack.lapState.currentLapTime = 0
+      raceTrack.lapState.bestLapTime = null
+      raceTrack.lapState.nextCheckpointIndex = 1
+      raceTrack.lapState.isLapComplete = false
+    }
   }
 
   public formatTime(seconds: number): string {

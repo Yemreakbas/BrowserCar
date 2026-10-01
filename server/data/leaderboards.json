@@ -14,6 +14,19 @@
       "rank": 1
     },
     {
+      "id": "rec-fastest_lap-usr_test_lb_jzjbf3-1790851770961",
+      "category": "fastest_lap",
+      "playerId": "usr_test_lb_jzjbf3",
+      "playerName": "ApexLeader_99",
+      "carId": "car-hypercar",
+      "carName": "Vortex R1 Hypercar",
+      "score": 17.55,
+      "formattedScore": "0:17.550",
+      "trackId": "circuit",
+      "date": 1790851770961,
+      "rank": 2
+    },
+    {
       "id": "seed-fl-1",
       "category": "fastest_lap",
       "playerId": "pilot_apex",
@@ -24,7 +37,7 @@
       "formattedScore": "0:18.421",
       "trackId": "circuit",
       "date": 1790183646468,
-      "rank": 2
+      "rank": 3
     },
     {
       "id": "seed-fl-2",
@@ -37,7 +50,7 @@
       "formattedScore": "0:20.895",
       "trackId": "circuit",
       "date": 1790270046468,
-      "rank": 3
+      "rank": 4
     },
     {
       "id": "seed-fl-3",
@@ -50,7 +63,7 @@
       "formattedScore": "0:22.340",
       "trackId": "circuit",
       "date": 1790356446468,
-      "rank": 4
+      "rank": 5
     },
     {
       "id": "seed-fl-4",
@@ -63,7 +76,7 @@
       "formattedScore": "0:24.110",
       "trackId": "circuit",
       "date": 1790424846468,
-      "rank": 5
+      "rank": 6
     }
   ],
   "best_drift_score": [
@@ -102,6 +115,18 @@
       "formattedScore": "41,800 Puan",
       "date": 1790399646468,
       "rank": 3
+    },
+    {
+      "id": "rec-best_drift_score-usr_hq883r2-1790762408737",
+      "category": "best_drift_score",
+      "playerId": "usr_hq883r2",
+      "playerName": "Racer_plsw",
+      "carId": "car-tuner",
+      "carName": "Drift Pilotu",
+      "score": 3518,
+      "formattedScore": "3.518 Puan",
+      "date": 1790762463464,
+      "rank": 4
     }
   ],
   "best_drift_combo": [
@@ -140,9 +165,33 @@
       "formattedScore": "3.5x Kombo",
       "date": 1790414046468,
       "rank": 3
+    },
+    {
+      "id": "rec-best_drift_combo-usr_hq883r2-1790762408757",
+      "category": "best_drift_combo",
+      "playerId": "usr_hq883r2",
+      "playerName": "Racer_plsw",
+      "carId": "car-tuner",
+      "carName": "Drift Pilotu",
+      "score": 3,
+      "formattedScore": "3.0x Kombo",
+      "date": 1790762417674,
+      "rank": 4
     }
   ],
   "city_top_speed": [
+    {
+      "id": "rec-city_top_speed-usr_hq883r2-1790668199070",
+      "category": "city_top_speed",
+      "playerId": "usr_hq883r2",
+      "playerName": "Racer_plsw",
+      "carId": "sedan_sports",
+      "carName": "Apex GT Sedan",
+      "score": 319,
+      "formattedScore": "319 km/h",
+      "date": 1790762712697,
+      "rank": 1
+    },
     {
       "id": "seed-ts-1",
       "category": "city_top_speed",
@@ -153,7 +202,7 @@
       "score": 254,
       "formattedScore": "254 km/h",
       "date": 1790183646468,
-      "rank": 1
+      "rank": 2
     },
     {
       "id": "seed-ts-2",
@@ -165,7 +214,7 @@
       "score": 228,
       "formattedScore": "228 km/h",
       "date": 1790356446468,
-      "rank": 2
+      "rank": 3
     },
     {
       "id": "seed-ts-3",
@@ -177,19 +226,31 @@
       "score": 215,
       "formattedScore": "215 km/h",
       "date": 1790428446468,
-      "rank": 3
+      "rank": 4
     },
     {
-      "id": "rec-city_top_speed-usr_hq883r2-1790668199070",
+      "id": "rec-city_top_speed-usr_perf_test_07sqae-1790851780043",
       "category": "city_top_speed",
-      "playerId": "usr_hq883r2",
-      "playerName": "Racer_plsw",
+      "playerId": "usr_perf_test_07sqae",
+      "playerName": "PerfTester",
+      "carId": "car-hypercar",
+      "carName": "Vortex R1 Hypercar",
+      "score": 180,
+      "formattedScore": "180 km/h",
+      "date": 1790851780043,
+      "rank": 5
+    },
+    {
+      "id": "rec-city_top_speed-p_cpcgg-1790851746093",
+      "category": "city_top_speed",
+      "playerId": "p_cpcgg",
+      "playerName": "AntiCheatHacker",
       "carId": "sedan_sports",
-      "carName": "Apex GT Sedan",
-      "score": 133,
-      "formattedScore": "133 km/h",
-      "date": 1790760218469,
-      "rank": 4
+      "carName": "Standart Spor",
+      "score": 150,
+      "formattedScore": "150 km/h",
+      "date": 1790851746093,
+      "rank": 6
     }
   ]
 }

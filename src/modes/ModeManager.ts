@@ -31,8 +31,12 @@ export class ModeManager {
       return
     }
 
-    if (this.activeMode) {
-      this.activeMode.onExit(this.context)
+    if (this.activeMode && typeof this.activeMode.onExit === 'function') {
+      try {
+        this.activeMode.onExit(this.context)
+      } catch (err) {
+        console.error('[ModeManager] Error in onExit:', err)
+      }
     }
 
     this.activeMode = nextMode

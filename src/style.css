@@ -2951,6 +2951,94 @@ body {
   100% { border-color: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); }
 }
 
+/* ==========================================================================
+   MINIMAP GPS RADAR HUD (PHASE 32)
+   ========================================================================== */
+.hud-minimap-container {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#hud-minimap-canvas {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  display: block;
+}
+
+.minimap-compass-n {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  color: #ef4444;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+  pointer-events: none;
+}
+
+.minimap-zoom-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #38bdf8;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  pointer-events: none;
+}
+
+.reset-btn.underglow-active {
+  background: rgba(0, 240, 255, 0.18);
+  border-color: rgba(0, 240, 255, 0.5);
+  color: #38bdf8;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+}
+
+.reset-btn.horn-active {
+  animation: hornPress 0.2s ease;
+}
+
+@keyframes hornPress {
+  0% { transform: scale(0.92); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1.0); }
+}
+
+.radar-flash-overlay {
+  position: fixed;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 99999;
+  transition: opacity 0.05s ease-out;
+}
+
+.radar-flash-overlay.active {
+  opacity: 0.95;
+  transition: none;
+}
+
+
 
 
 

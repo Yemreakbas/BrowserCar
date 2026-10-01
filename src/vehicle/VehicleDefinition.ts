@@ -31,7 +31,7 @@ export const VEHICLE_CATALOG: VehicleDefinition[] = [
     badge: 'Dengeli • Klasik GT',
     tagline: 'Çok Yönlü Sokak & Pist Canavarı',
     description: 'Güçlü V6 motor, mükemmel ağırlık dengesi ve hem yarış hem serbest sürüş için ideal dinamikler.',
-    modelPath: '/assets/cars/sedan-sports.glb',
+    modelPath: './assets/cars/sedan-sports.glb',
     scale: 1.45,
     stats: {
       topSpeedKmh: 137,
@@ -73,7 +73,7 @@ export const VEHICLE_CATALOG: VehicleDefinition[] = [
     badge: 'Pist Şampiyonu',
     tagline: 'Ultra Yüksek Hız & Maksimum Downforce',
     description: "Saf yarış DNA'sı. 162 km/h son sürat, devasa aerodinamik tutuş ve pist virajlarında kusursuz rayda gidiş hissi.",
-    modelPath: '/assets/cars/race.glb',
+    modelPath: './assets/cars/race.glb',
     scale: 1.45,
     stats: {
       topSpeedKmh: 162,
@@ -115,7 +115,7 @@ export const VEHICLE_CATALOG: VehicleDefinition[] = [
     badge: 'Yanlama Ustası',
     tagline: 'Kıvrak Şasi & Kolay Kontrol Edilen Açılar',
     description: 'Arkadan itişli drift uzmanı. Düşük tutuşlu arka şasi, yüksek açılı direksiyon ve +35% drift puan çarpanı.',
-    modelPath: '/assets/cars/hatchback-sports.glb',
+    modelPath: './assets/cars/hatchback-sports.glb',
     scale: 1.45,
     stats: {
       topSpeedKmh: 125,
@@ -157,7 +157,7 @@ export const VEHICLE_CATALOG: VehicleDefinition[] = [
     badge: 'Geleceğin Teknolojisi',
     tagline: 'Dört Çeker Anlık Tork & Çift Motor',
     description: 'Yeni nesil elektrikli hiper prototip. Anında 0-100 fırlatma, tork vektörleme ve pürüzsüz yüksek hız dengesi.',
-    modelPath: '/assets/cars/race-future.glb',
+    modelPath: './assets/cars/race-future.glb',
     scale: 1.45,
     stats: {
       topSpeedKmh: 154,
@@ -199,7 +199,7 @@ export const VEHICLE_CATALOG: VehicleDefinition[] = [
     badge: 'Ağır Takip Kruvazörü',
     tagline: 'Dayanıklı Gövde & Güçlü Blok V8',
     description: 'Ağır çelik takviyeli şasi, acımasız itiş gücü ve çarpışmalarda sarsılmayan kararlılık.',
-    modelPath: '/assets/cars/police.glb',
+    modelPath: './assets/cars/police.glb',
     scale: 1.45,
     stats: {
       topSpeedKmh: 144,
@@ -241,7 +241,7 @@ export const VEHICLE_CATALOG: VehicleDefinition[] = [
     badge: 'Lüks Zırhlı Dev',
     tagline: 'Üstün Konfor & Sarsılmaz Ağır Şasi',
     description: 'Yüksek sürüş pozisyonu, yumuşak süspansiyon esnemesi ve sağlam yol tutuşu ile şehirde heybetli bir sürüş.',
-    modelPath: '/assets/cars/suv-luxury.glb',
+    modelPath: './assets/cars/suv-luxury.glb',
     scale: 1.45,
     stats: {
       topSpeedKmh: 132,

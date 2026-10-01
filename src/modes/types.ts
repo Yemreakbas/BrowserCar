@@ -21,6 +21,7 @@ export type MapType = (typeof MapType)[keyof typeof MapType]
 import type { TireSmokeSystem } from '../effects/TireSmoke.ts'
 import type { RaceResult } from '../race/RaceSystem.ts'
 import type { NetworkManager } from '../networking/NetworkManager.ts'
+import type { P2PNetworkManager } from '../networking/P2PNetworkManager.ts'
 import type { RaceParticipantResult, DriftParticipantProgress } from '../../shared/src/messages.ts'
 import type { OnlineDriftState } from '../../shared/src/constants.ts'
 
@@ -67,7 +68,7 @@ export interface ModeContext {
   driftTrack: DriftTrack
   hud: ModeHUDController
   tireSmoke: TireSmokeSystem
-  networkManager?: NetworkManager
+  networkManager?: NetworkManager | P2PNetworkManager
   audio?: AudioManager
   aiManager?: AIManager
   dayNightCycle?: DayNightCycle

@@ -10,6 +10,7 @@ export interface DrivingAudioState {
   isDrifting: boolean
   slipAngleRad: number
   isNitro?: boolean
+  isRevLimiter?: boolean
 }
 
 export type SoundKey =
@@ -172,15 +173,15 @@ export class AudioManager {
     if (!this.ctx) return
 
     const soundFiles: Array<{ key: SoundKey; path: string }> = [
-      { key: 'engine_idle', path: '/assets/audio/engine_idle.wav' },
-      { key: 'engine_accel', path: '/assets/audio/engine_accel.wav' },
-      { key: 'brake', path: '/assets/audio/brake.wav' },
-      { key: 'skid', path: '/assets/audio/skid.wav' },
-      { key: 'collision', path: '/assets/audio/collision.wav' },
-      { key: 'countdown_beep', path: '/assets/audio/countdown_beep.wav' },
-      { key: 'countdown_go', path: '/assets/audio/countdown_go.wav' },
-      { key: 'race_finish', path: '/assets/audio/race_finish.wav' },
-      { key: 'menu_click', path: '/assets/audio/menu_click.wav' },
+      { key: 'engine_idle', path: './assets/audio/engine_idle.wav' },
+      { key: 'engine_accel', path: './assets/audio/engine_accel.wav' },
+      { key: 'brake', path: './assets/audio/brake.wav' },
+      { key: 'skid', path: './assets/audio/skid.wav' },
+      { key: 'collision', path: './assets/audio/collision.wav' },
+      { key: 'countdown_beep', path: './assets/audio/countdown_beep.wav' },
+      { key: 'countdown_go', path: './assets/audio/countdown_go.wav' },
+      { key: 'race_finish', path: './assets/audio/race_finish.wav' },
+      { key: 'menu_click', path: './assets/audio/menu_click.wav' },
     ]
 
     await Promise.all(
@@ -505,7 +506,144 @@ export class AudioManager {
     this.isSirenRunning = false
   }
 
+  private lastPopTime: number = 0
 
+  /**
+   * Generates a realistic short crackle/pop sound for the rev limiter (aragaz / kesici / anti-lag)
+   */
+  public playExhaustPop(intensity: number = 0.8): void {
+    if (!this.ctx || !this.isUnlocked || this.isMuted) return
+    const now = this.ctx.currentTime
+    if (now - this.lastPopTime < 0.055) return
+    this.lastPopTime = now
+
+    const bufferSize = Math.floor(this.ctx.sampleRate * 0.035) // 35ms snappy burst
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+
+    for (let i = 0; i < bufferSize; i++) {
+      const decay = 1 - (i / bufferSize)
+      data[i] = (Math.random() * 2 - 1) * Math.pow(decay, 2.5)
+    }
+
+    const popSource = this.ctx.createBufferSource()
+    popSource.buffer = buffer
+
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.setValueAtTime(550 + Math.random() * 450, now)
+    filter.Q.setValueAtTime(2.8, now)
+
+    const gain = this.ctx.createGain()
+    const vol = Math.min(1.0, 0.42 * intensity)
+    gain.gain.setValueAtTime(vol, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035)
+
+    popSource.connect(filter)
+    filter.connect(gain)
+    gain.connect(this.sfxGain || this.ctx.destination)
+
+    popSource.start(now)
+  }
+
+  /**
+   * Plays realistic dual-tone European automotive horn (F4 349Hz + A4 440Hz)
+   */
+  public playHorn(duration: number = 0.38): void {
+    if (!this.ctx || !this.isUnlocked || this.isMuted) return
+    const now = this.ctx.currentTime
+
+    const osc1 = this.ctx.createOscillator()
+    const osc2 = this.ctx.createOscillator()
+    const gainNode = this.ctx.createGain()
+    const filter = this.ctx.createBiquadFilter()
+
+    osc1.type = 'sawtooth'
+    osc1.frequency.setValueAtTime(349.23, now) // F4 note
+
+    osc2.type = 'triangle'
+    osc2.frequency.setValueAtTime(440.0, now) // A4 note
+
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(2200, now)
+
+    gainNode.gain.setValueAtTime(0.001, now)
+    gainNode.gain.linearRampToValueAtTime(0.48, now + 0.02)
+    gainNode.gain.setValueAtTime(0.48, now + duration - 0.04)
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration)
+
+    osc1.connect(filter)
+    osc2.connect(filter)
+    filter.connect(gainNode)
+    gainNode.connect(this.sfxGain || this.ctx.destination)
+
+    osc1.start(now)
+    osc2.start(now)
+    osc1.stop(now + duration)
+    osc2.stop(now + duration)
+  }
+
+  /**
+   * Plays turbo compressor flutter ("stu-tu-tu-tu") and atmospheric blow-off valve hiss
+   */
+  public playTurboBlowOff(intensity: number = 1.0): void {
+    if (!this.ctx || !this.isUnlocked || this.isMuted) return
+    const now = this.ctx.currentTime
+
+    const dur = 0.42
+    const bufSize = Math.floor(this.ctx.sampleRate * dur)
+    const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate)
+    const data = buf.getChannelData(0)
+
+    for (let i = 0; i < bufSize; i++) {
+      const t = i / this.ctx.sampleRate
+      const flutter = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 14.0)
+      const env = Math.exp(-t * 6.5) * flutter
+      data[i] = (Math.random() * 2 - 1) * env
+    }
+
+    const src = this.ctx.createBufferSource()
+    src.buffer = buf
+
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.setValueAtTime(1600, now)
+    filter.frequency.exponentialRampToValueAtTime(900, now + dur)
+    filter.Q.setValueAtTime(3.2, now)
+
+    const gain = this.ctx.createGain()
+    gain.gain.setValueAtTime(Math.min(0.65, 0.45 * intensity), now)
+
+    src.connect(filter)
+    filter.connect(gain)
+    gain.connect(this.sfxGain || this.ctx.destination)
+
+    src.start(now)
+  }
+
+  /**
+   * Plays speed radar camera electronic flash & shutter click sound
+   */
+  public playSpeedCameraFlash(): void {
+    if (!this.ctx || !this.isUnlocked || this.isMuted) return
+    const now = this.ctx.currentTime
+
+    const osc = this.ctx.createOscillator()
+    const gain = this.ctx.createGain()
+
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(2400, now)
+    osc.frequency.exponentialRampToValueAtTime(6000, now + 0.12)
+
+    gain.gain.setValueAtTime(0.35, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14)
+
+    osc.connect(gain)
+    gain.connect(this.sfxGain || this.ctx.destination)
+
+    osc.start(now)
+    osc.stop(now + 0.14)
+  }
 
   /**
    * Continuously updates vehicle driving audio parameters based on physics state
@@ -513,6 +651,40 @@ export class AudioManager {
   public updateDrivingAudio(state: DrivingAudioState): void {
     if (!this.ctx || !this.isUnlocked || this.isMuted) return
     const now = this.ctx.currentTime
+
+    // 0. Rev Limiter (Aragaz / Kesici / Two-Pedal Burnout)
+    if (state.isRevLimiter) {
+      const revPhase = Math.sin(now * 95) // ~15 Hz bounce
+      const stutterPitch = 2.05 + revPhase * 0.45
+
+      if (this.engineIdleSource && this.engineIdleSource.playbackRate) {
+        this.engineIdleSource.playbackRate.setValueAtTime(stutterPitch * 0.85, now)
+      }
+      if (this.engineAccelSource && this.engineAccelSource.playbackRate) {
+        this.engineAccelSource.playbackRate.setValueAtTime(stutterPitch * 1.12, now)
+      }
+      if (this.engineAccelGain) {
+        this.engineAccelGain.gain.setValueAtTime(0.9, now)
+      }
+      if (this.engineIdleGain) {
+        this.engineIdleGain.gain.setValueAtTime(0.18, now)
+      }
+      if (this.engineFilter) {
+        this.engineFilter.frequency.setValueAtTime(4200 + revPhase * 1400, now)
+      }
+
+      // Pop exhaust backfire on crest of rev limiter bounce
+      if (revPhase > 0.55) {
+        this.playExhaustPop(0.95)
+      }
+
+      // Burnout tire skid sound
+      if (this.skidGain) {
+        this.skidGain.gain.setTargetAtTime(0.75, now, 0.05)
+      }
+      return
+    }
+
     const absSpeed = Math.abs(state.speedKmh)
     const speedRatio = Math.min(absSpeed / 140, 1.0)
     const throttle = Math.max(0, Math.min(1, state.throttle))
