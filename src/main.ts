@@ -388,6 +388,65 @@ app.innerHTML = `
         </div>
       </div>
     </footer>
+
+    <!-- Mobile Virtual Touch Controls (Phase 33) -->
+    <div id="mobile-controls-overlay" class="mobile-controls-overlay" aria-label="Mobil Dokunmatik Kontroller">
+      <!-- Left Steering Zone (Left Thumb) -->
+      <div class="mobile-steer-zone">
+        <button id="touch-steer-left" class="touch-btn touch-btn-steer" type="button" aria-label="Sola Dön">
+          <span class="touch-icon">◀</span>
+          <span class="touch-label">SOL</span>
+        </button>
+        <button id="touch-steer-right" class="touch-btn touch-btn-steer" type="button" aria-label="Sağa Dön">
+          <span class="touch-icon">▶</span>
+          <span class="touch-label">SAĞ</span>
+        </button>
+      </div>
+
+      <!-- Quick Action Buttons (Top Right) -->
+      <div class="mobile-quick-actions">
+        <button id="touch-btn-reset" class="touch-quick-btn" type="button" aria-label="Sıfırla" title="Sıfırla">
+          <span>🔄</span>
+          <span>SIFIRLA</span>
+        </button>
+        <button id="touch-btn-horn" class="touch-quick-btn" type="button" aria-label="Korna" title="Korna">
+          <span>📢</span>
+          <span>KORNA</span>
+        </button>
+        <button id="touch-btn-cam" class="touch-quick-btn" type="button" aria-label="Kamera Açısı" title="Kamera">
+          <span>🎥</span>
+          <span>KAMERA</span>
+        </button>
+        <button id="touch-btn-menu" class="touch-quick-btn" type="button" aria-label="Menü / Modlar" title="Menü">
+          <span>☰</span>
+          <span>MENÜ</span>
+        </button>
+      </div>
+
+      <!-- Right Pedal Zone (Right Thumb): Gas, Brake/Reverse, Nitro, Handbrake -->
+      <div class="mobile-pedal-zone">
+        <div class="mobile-aux-row">
+          <button id="touch-btn-nitro" class="touch-btn touch-btn-nitro" type="button" aria-label="Nitro Boost">
+            <span class="touch-icon">⚡</span>
+            <span class="touch-label">NİTRO</span>
+          </button>
+          <button id="touch-btn-handbrake" class="touch-btn touch-btn-handbrake" type="button" aria-label="El Freni / Yanlama">
+            <span class="touch-icon">🅿️</span>
+            <span class="touch-label">EL FRENİ</span>
+          </button>
+        </div>
+        <div class="mobile-pedals-row">
+          <button id="touch-pedal-brake" class="touch-btn touch-btn-brake" type="button" aria-label="Fren ve Geri">
+            <span class="touch-icon">▼</span>
+            <span class="touch-label">FREN</span>
+          </button>
+          <button id="touch-pedal-gas" class="touch-btn touch-btn-gas" type="button" aria-label="Gaz">
+            <span class="touch-icon">▲</span>
+            <span class="touch-label">GAZ</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Game Mode Selection Modal (Phase 8) -->
@@ -3257,6 +3316,176 @@ async function bootstrap() {
   btnMultiplayer.addEventListener('click', () => {
     audioManager.playClick()
     openMasterModal('online')
+  })
+
+  // --- PHASE 33: MOBILE TOUCH CONTROLS EVENT WIRING ---
+  const mobileOverlay = document.querySelector<HTMLDivElement>('#mobile-controls-overlay')
+  const touchSteerLeft = document.querySelector<HTMLButtonElement>('#touch-steer-left')
+  const touchSteerRight = document.querySelector<HTMLButtonElement>('#touch-steer-right')
+  const touchPedalGas = document.querySelector<HTMLButtonElement>('#touch-pedal-gas')
+  const touchPedalBrake = document.querySelector<HTMLButtonElement>('#touch-pedal-brake')
+  const touchBtnNitro = document.querySelector<HTMLButtonElement>('#touch-btn-nitro')
+  const touchBtnHandbrake = document.querySelector<HTMLButtonElement>('#touch-btn-handbrake')
+  const touchBtnReset = document.querySelector<HTMLButtonElement>('#touch-btn-reset')
+  const touchBtnHorn = document.querySelector<HTMLButtonElement>('#touch-btn-horn')
+  const touchBtnCam = document.querySelector<HTMLButtonElement>('#touch-btn-cam')
+  const touchBtnMenu = document.querySelector<HTMLButtonElement>('#touch-btn-menu')
+
+  const isTouchDevice =
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia('(pointer: coarse)').matches
+
+  if (mobileOverlay && (isTouchDevice || window.innerWidth <= 1024)) {
+    mobileOverlay.classList.add('visible')
+  }
+
+  window.addEventListener('resize', () => {
+    if (mobileOverlay && (isTouchDevice || window.innerWidth <= 1024)) {
+      mobileOverlay.classList.add('visible')
+    }
+  })
+
+  // Multi-touch button binder helper (prevents gesture zoom, context menus, and stuck inputs)
+  function bindTouchButton(
+    btn: HTMLButtonElement | null,
+    onPress: () => void,
+    onRelease: () => void,
+    hapticMs: number = 10
+  ) {
+    if (!btn) return
+    let isPressed = false
+
+    const handlePress = (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!isPressed) {
+        isPressed = true
+        btn.classList.add('active')
+        if (navigator.vibrate && hapticMs > 0) {
+          try { navigator.vibrate(hapticMs) } catch (_) {}
+        }
+        onPress()
+      }
+    }
+
+    const handleRelease = (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (isPressed) {
+        isPressed = false
+        btn.classList.remove('active')
+        onRelease()
+      }
+    }
+
+    btn.addEventListener('touchstart', handlePress, { passive: false })
+    btn.addEventListener('touchend', handleRelease, { passive: false })
+    btn.addEventListener('touchcancel', handleRelease, { passive: false })
+
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      handlePress(e)
+    })
+    btn.addEventListener('pointerup', handleRelease)
+    btn.addEventListener('pointercancel', handleRelease)
+    btn.addEventListener('pointerleave', (e) => {
+      if (isPressed) handleRelease(e)
+    })
+    btn.addEventListener('contextmenu', (e) => e.preventDefault())
+  }
+
+  // Quick action tap binder (debounced against simulated duplicate events)
+  function bindTapButton(btn: HTMLButtonElement | null, onTap: () => void, hapticMs: number = 15) {
+    if (!btn) return
+    let lastTap = 0
+
+    const trigger = (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const now = performance.now()
+      if (now - lastTap < 300) return
+      lastTap = now
+      if (navigator.vibrate && hapticMs > 0) {
+        try { navigator.vibrate(hapticMs) } catch (_) {}
+      }
+      onTap()
+    }
+
+    btn.addEventListener('touchstart', trigger, { passive: false })
+    btn.addEventListener('click', trigger)
+    btn.addEventListener('contextmenu', (e) => e.preventDefault())
+  }
+
+  // Bind steering controls
+  bindTouchButton(
+    touchSteerLeft,
+    () => { keys.left = true; keyA.classList.add('active') },
+    () => { keys.left = false; keyA.classList.remove('active') },
+    10
+  )
+
+  bindTouchButton(
+    touchSteerRight,
+    () => { keys.right = true; keyD.classList.add('active') },
+    () => { keys.right = false; keyD.classList.remove('active') },
+    10
+  )
+
+  // Bind pedals (Gas & Brake/Reverse)
+  bindTouchButton(
+    touchPedalGas,
+    () => { keys.forward = true; keyW.classList.add('active') },
+    () => { keys.forward = false; keyW.classList.remove('active') },
+    15
+  )
+
+  bindTouchButton(
+    touchPedalBrake,
+    () => { keys.backward = true; keyS.classList.add('active') },
+    () => { keys.backward = false; keyS.classList.remove('active') },
+    15
+  )
+
+  // Bind aux pedals (Nitro & Handbrake)
+  bindTouchButton(
+    touchBtnNitro,
+    () => { keys.nitro = true },
+    () => { keys.nitro = false },
+    20
+  )
+
+  bindTouchButton(
+    touchBtnHandbrake,
+    () => { keys.handbrake = true },
+    () => { keys.handbrake = false },
+    20
+  )
+
+  // Bind quick action buttons
+  bindTapButton(touchBtnReset, () => {
+    audioManager.playClick()
+    doRespawn()
+  })
+
+  bindTapButton(touchBtnHorn, () => {
+    triggerHorn()
+  })
+
+  bindTapButton(touchBtnCam, () => {
+    const nextPreset = followCamera.cyclePreset()
+    const presetLabels: Record<CameraPreset, string> = {
+      NORMAL: 'Normal Takip (Dengeli)',
+      CLOSE: 'Yakın Takip (Dinamik)',
+      FAR: 'Uzak / Geniş Açı (Sinematik)',
+      DRIFT: 'Drift Modu (Geniş Savrulma)',
+    }
+    showResetToast(`Kamera: ${presetLabels[nextPreset]}`, 'info', 1200)
+  })
+
+  bindTapButton(touchBtnMenu, () => {
+    audioManager.playClick()
+    openModal()
   })
 
   // --- 8. PERFORMANCE & FPS MONITOR (PHASE 26) ---
