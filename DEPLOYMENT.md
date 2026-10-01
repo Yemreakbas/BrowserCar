@@ -78,6 +78,19 @@ curl http://localhost:3001/health
 3. **Site configuration > Environment variables** alanına `VITE_SERVER_URL` değerinizi ekleyin.
 4. Dağıtımı tamamlayın.
 
+### Seçenek C: Cloudflare Pages Statik Oyun Portalı (`games/OYUN_ADI/`)
+Oyun portalı klasör yapısında (`https://portal.pages.dev/games/browsercar/`) sıfır build adımıyla çalıştırmak için:
+1. `npm run build` komutunu çalıştırın.
+2. Oluşan `dist/` klasörünün içindeki tüm dosyaları portalınızdaki `games/OYUN_ADI/` klasörüne kopyalayın:
+   - `games/OYUN_ADI/index.html` (CDN `<script type="importmap">` ve PeerJS içerir)
+   - `games/OYUN_ADI/style.css`
+   - `games/OYUN_ADI/game.js` (Bağımsız ES Module)
+   - `games/OYUN_ADI/assets/` (Arabalar, çevre modelleri ve sesler)
+3. **Sıfır Sunucu & Sıfır Bağımlılık:**
+   - Harici Node.js sunucusuna ihtiyaç yoktur.
+   - Tüm çok oyunculu bağlantılar WebRTC (PeerJS) üzerinden 4 haneli oda kodlarıyla doğrudan oyuncular arasında kurulur.
+   - Tüm dosya yolları katı şekilde `./` göreli yapısıyla çalıştığından, her türlü alt dizinde sorunsuz çalışır.
+
 ---
 
 ## 🔒 5. Canlı Ortam Güvenlik ve Ayarlar (WSS & CORS)

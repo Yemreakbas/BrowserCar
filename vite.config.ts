@@ -5,11 +5,16 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 5000,
     rollupOptions: {
+      external: [
+        'three',
+        'three/examples/jsm/loaders/GLTFLoader.js',
+        '@dimforge/rapier3d-compat',
+      ],
       output: {
-        manualChunks(id: string) {
-          if (id.includes('node_modules/three')) return 'vendor-three'
-          if (id.includes('node_modules/@dimforge/rapier3d-compat')) return 'vendor-rapier'
-          if (id.includes('node_modules/socket.io-client')) return 'vendor-socket'
+        entryFileNames: 'game.js',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith('.css')) return 'style.css'
+          return 'assets/[name][extname]'
         },
       },
     },

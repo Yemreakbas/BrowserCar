@@ -1752,6 +1752,7 @@ async function bootstrap() {
       const preset = underglow.getCurrentPreset()
       btnUnderglow?.classList.add('underglow-active')
       if (underglowBtnText) underglowBtnText.textContent = preset.name.split(' ')[0]
+      if (underglowBtnIcon) underglowBtnIcon.style.color = preset.css
       showResetToast(`🟣 Neon: ${preset.name}`, 'info', 1400)
     } else if (underglow.currentColorIndex === NEON_PRESETS.length - 1) {
       underglow.isEnabled = false
@@ -1759,11 +1760,13 @@ async function bootstrap() {
       underglow.currentColorIndex = 0
       btnUnderglow?.classList.remove('underglow-active')
       if (underglowBtnText) underglowBtnText.textContent = 'Kapalı'
+      if (underglowBtnIcon) underglowBtnIcon.style.color = '#94a3b8'
       showResetToast('⚫ Neon Alt Işık Kapandı', 'info', 1200)
     } else {
       const preset = underglow.cycleColor()
       btnUnderglow?.classList.add('underglow-active')
       if (underglowBtnText) underglowBtnText.textContent = preset.name.split(' ')[0]
+      if (underglowBtnIcon) underglowBtnIcon.style.color = preset.css
       showResetToast(`🟣 Neon: ${preset.name}`, 'info', 1400)
     }
   }
